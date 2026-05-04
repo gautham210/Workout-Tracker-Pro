@@ -174,7 +174,12 @@ export default function WorkoutActive() {
   const closeSearch = () => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); setSearchError(null); };
 
   const addExercise = (exercise) => {
-    setSessionExercises(prev => [...prev, { exercise, sets: [{ weight_kg: '', reps: '' }], fromLoop: false }]);
+    setSessionExercises(prev => {
+      const isFirst = prev.length === 0;
+      const setCount = isFirst ? 4 : 3;
+      const initialSets = Array.from({ length: setCount }, () => ({ weight_kg: '', reps: '15' }));
+      return [...prev, { exercise, sets: initialSets, fromLoop: false }];
+    });
     closeSearch();
   };
 
@@ -190,13 +195,25 @@ export default function WorkoutActive() {
   };
 
   const updateSet = (exIndex, setIndex, field, value) => {
+    let val = value;
+    if (val !== '') {
+      const num = parseFloat(val);
+      if (field === 'weight_kg') {
+        if (num > 300) val = '300';
+        else if (num < 0) val = '0';
+      }
+      if (field === 'reps') {
+        if (num > 50) val = '50';
+        else if (num < 1) val = '1';
+      }
+    }
     setSessionExercises(prev => prev.map((item, i) => {
       if (i !== exIndex) return item;
       return {
         ...item,
         sets: item.sets.map((set, j) => {
           if (j !== setIndex) return set;
-          return { ...set, [field]: value };
+          return { ...set, [field]: val };
         })
       };
     }));
@@ -371,22 +388,33 @@ export default function WorkoutActive() {
           )}
 
           <div className="stagger-3" style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '400px', marginTop: completionData.prs.length > 0 ? '0' : '40px' }}>
-             {profile?.active_loop && (
-               <button
-                 className="btn-primary interactive-card"
-                 onClick={() => {
-                   // Reset session state, then bump trigger to re-run preload for next day
-                   setIsCompleteMode(false);
-                   setSessionExercises([]);
-                   setWorkoutDate(todayLocalISO());
-                   setSaveError(null);
+             <button
+               className="btn-primary interactive-card"
+               onClick={() => {
+                 let nextDay = splitDay;
+                 if (!profile?.active_loop) {
+                   if (profile?.custom_split?.length > 0 && splitType === 'Custom') {
+                     const idx = profile.custom_split.indexOf(splitDay);
+                     nextDay = profile.custom_split[(idx + 1) % profile.custom_split.length] || profile.custom_split[0];
+                   } else if (SPLITS_MAP[splitType]) {
+                     const days = SPLITS_MAP[splitType];
+                     const idx = days.indexOf(splitDay);
+                     nextDay = days[(idx + 1) % days.length] || days[0];
+                   }
+                 }
+                 setIsCompleteMode(false);
+                 setSessionExercises([]);
+                 setWorkoutDate(todayLocalISO());
+                 setSplitDay(nextDay);
+                 setSaveError(null);
+                 if (profile?.active_loop) {
                    setLoopTrigger(prev => prev + 1);
-                 }}
-                 style={{ padding: '20px', borderRadius: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
-               >
-                 <Repeat size={20} /> Next Session
-               </button>
-             )}
+                 }
+               }}
+               style={{ padding: '20px', borderRadius: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
+             >
+               <Repeat size={20} /> Next Workout &rarr;
+             </button>
              <button className="btn-primary interactive-card" onClick={() => navigate('/analytics')} style={{ padding: '20px', borderRadius: '16px', fontSize: '18px' }}>View Analytics</button>
              <button className="btn-secondary interactive-card" onClick={() => navigate('/')} style={{ padding: '20px', borderRadius: '16px', fontSize: '18px' }}>Dashboard</button>
           </div>
@@ -452,7 +480,22 @@ export default function WorkoutActive() {
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h1 className="title" style={{ margin: 0 }}>Active Block</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h1 className="title" style={{ margin: 0 }}>Active Block</h1>
+            {sessionExercises.length > 0 && (
+              <button 
+                onClick={() => {
+                  if(window.confirm("Are you sure you want to reset the current session?")) {
+                    setSessionExercises([]);
+                    setSplitDay(SPLITS_MAP[splitType]?.[0] || 'Custom');
+                  }
+                }}
+                style={{ background: 'transparent', border: '1px solid rgba(255,69,58,0.3)', color: 'var(--error-color)', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                Reset Session
+              </button>
+            )}
+          </div>
 
           {/* ── Inline date chip ── */}
           <div

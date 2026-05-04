@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { ChevronDown, ChevronRight, Activity } from 'lucide-react';
+import { ChevronDown, ChevronRight, Activity, Trash } from 'lucide-react';
 
 export default function History() {
   const { user } = useAuth();
@@ -23,6 +23,22 @@ export default function History() {
     };
     fetchHistory();
   }, [user]);
+
+  const handleDelete = async (sessionId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this session?")) return;
+    
+    // Manual cascade in case DB doesn't have it
+    const { data: exercises } = await supabase.from('session_exercises').select('id').eq('session_id', sessionId);
+    if (exercises && exercises.length > 0) {
+       const exIds = exercises.map(ex => ex.id);
+       await supabase.from('sets').delete().in('session_exercise_id', exIds);
+       await supabase.from('session_exercises').delete().eq('session_id', sessionId);
+    }
+    await supabase.from('workout_sessions').delete().eq('id', sessionId);
+    
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+  };
 
   if (loading) return null;
 
@@ -56,8 +72,15 @@ export default function History() {
                       <div style={{ color: 'var(--accent-hover)', fontSize: '12px', fontWeight: '800', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '6px' }}>{session.split_type} Routine</div>
                       <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px', color: 'white' }}>{session.split_day} Day</h3>
                     </div>
-                    <div style={{ color: 'white', background: 'rgba(255,255,255,0.08)', borderRadius: '50%', padding: '10px' }}>
-                      {expandedId === session.id ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {expandedId === session.id && (
+                        <button onClick={(e) => handleDelete(session.id, e)} style={{ background: 'rgba(255,69,58,0.1)', color: 'var(--error-color)', padding: '10px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex' }}>
+                          <Trash size={18} />
+                        </button>
+                      )}
+                      <div style={{ color: 'white', background: 'rgba(255,255,255,0.08)', borderRadius: '50%', padding: '10px' }}>
+                        {expandedId === session.id ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                      </div>
                     </div>
                   </div>
 
