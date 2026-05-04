@@ -17,12 +17,14 @@ const formatDateLabel = (iso) => {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
-const SPLITS = {
+const SPLITS_MAP = {
   "PPL": ["Push", "Pull", "Legs"],
   "Bro Split": ["Chest", "Back", "Shoulders", "Arms", "Legs"],
   "Upper / Lower": ["Upper", "Lower"],
   "Full Body": ["Full Body"]
 };
+
+const SPLIT_KEYS = ["PPL", "Bro Split", "Upper / Lower", "Full Body"];
 
 export default function WorkoutActive() {
   const { user, profile } = useAuth();
@@ -146,7 +148,7 @@ export default function WorkoutActive() {
 
   const handleSplitTypeChange = (newType) => {
     setSplitType(newType);
-    const seq = SPLITS[newType];
+    const seq = SPLITS_MAP[newType];
     if (seq && seq.length > 0) setSplitDay(seq[0]);
     else setSplitDay('');
   };
@@ -172,33 +174,46 @@ export default function WorkoutActive() {
   const closeSearch = () => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); setSearchError(null); };
 
   const addExercise = (exercise) => {
-    setSessionExercises([...sessionExercises, { exercise, sets: [{ weight_kg: '', reps: '' }] }]);
+    setSessionExercises(prev => [...prev, { exercise, sets: [{ weight_kg: '', reps: '' }], fromLoop: false }]);
     closeSearch();
   };
 
   const addSet = (exIndex) => {
-    const updated = [...sessionExercises];
-    const lastSet = updated[exIndex].sets[updated[exIndex].sets.length - 1];
-    updated[exIndex].sets.push({ weight_kg: lastSet ? lastSet.weight_kg : '', reps: '' });
-    setSessionExercises(updated);
+    setSessionExercises(prev => prev.map((item, i) => {
+      if (i !== exIndex) return item;
+      const lastSet = item.sets[item.sets.length - 1];
+      return { 
+        ...item, 
+        sets: [...item.sets, { weight_kg: lastSet ? lastSet.weight_kg : '', reps: '' }] 
+      };
+    }));
   };
 
   const updateSet = (exIndex, setIndex, field, value) => {
-    const updated = [...sessionExercises];
-    updated[exIndex].sets[setIndex][field] = value;
-    setSessionExercises(updated);
+    setSessionExercises(prev => prev.map((item, i) => {
+      if (i !== exIndex) return item;
+      return {
+        ...item,
+        sets: item.sets.map((set, j) => {
+          if (j !== setIndex) return set;
+          return { ...set, [field]: value };
+        })
+      };
+    }));
   };
 
   const removeSet = (exIndex, setIndex) => {
-    const updated = [...sessionExercises];
-    updated[exIndex].sets.splice(setIndex, 1);
-    setSessionExercises(updated);
+    setSessionExercises(prev => prev.map((item, i) => {
+      if (i !== exIndex) return item;
+      return {
+        ...item,
+        sets: item.sets.filter((_, j) => j !== setIndex)
+      };
+    }));
   };
 
   const removeExercise = (exIndex) => {
-    const updated = [...sessionExercises];
-    updated.splice(exIndex, 1);
-    setSessionExercises(updated);
+    setSessionExercises(prev => prev.filter((_, i) => i !== exIndex));
   };
 
   const handleSave = async () => {
@@ -365,7 +380,7 @@ export default function WorkoutActive() {
                    setSessionExercises([]);
                    setWorkoutDate(todayLocalISO());
                    setSaveError(null);
-                   setLoopTrigger(t => t + 1);
+                   setLoopTrigger(prev => prev + 1);
                  }}
                  style={{ padding: '20px', borderRadius: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
                >
@@ -465,7 +480,7 @@ export default function WorkoutActive() {
           {/* Split type */}
           <Dropdown
             value={splitType}
-            options={Object.keys(SPLITS)}
+            options={SPLIT_KEYS}
             onChange={handleSplitTypeChange}
             accentColor="var(--accent-color)"
           />
@@ -475,7 +490,7 @@ export default function WorkoutActive() {
           {/* Split day */}
           <Dropdown
             value={splitDay}
-            options={SPLITS[splitType] ?? ['Custom']}
+            options={SPLITS_MAP[splitType] ?? ['Custom']}
             onChange={setSplitDay}
             accentColor="white"
           />
