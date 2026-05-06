@@ -42,7 +42,7 @@ const MainLayout = () => {
         <Outlet />
       </div>
       
-      <nav className="mobile-bottom-nav glass" style={{ borderRadius: 0, borderBottom: 'none', borderLeft: 'none', borderRight: 'none' }}>
+      <nav className="mobile-bottom-nav" style={{ background: 'rgba(10, 14, 20, 0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.08)', borderRadius: 0, borderBottom: 'none', borderLeft: 'none', borderRight: 'none' }}>
         <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
           <Home size={24} />
           <span>Home</span>

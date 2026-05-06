@@ -8,6 +8,13 @@ import { ChevronDown } from 'lucide-react';
 export default function Dropdown({ value, options, onChange, accentColor = 'var(--accent-hover)' }) {
   const [open, setOpen] = useState(false);
   const ref             = useRef(null);
+  const [buttonRect, setButtonRect] = useState({ top: 0, left: 0, width: 0, bottom: 0 });
+
+  useEffect(() => {
+    if (open && ref.current) {
+      setButtonRect(ref.current.getBoundingClientRect());
+    }
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {
@@ -43,11 +50,10 @@ export default function Dropdown({ value, options, onChange, accentColor = 'var(
 
       {/* Menu */}
       <div style={{
-        position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 200,
+        position: 'fixed', top: buttonRect.bottom ? buttonRect.bottom + 6 : 0, left: buttonRect.left, width: buttonRect.width, zIndex: 99999,
         background: '#0f172a',
         border: '1px solid rgba(255,255,255,0.08)',
         borderRadius: '14px',
-        overflow: 'hidden',
         boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
         // Animate open/close
         opacity:    open ? 1 : 0,
