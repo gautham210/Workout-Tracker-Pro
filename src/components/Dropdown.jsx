@@ -31,7 +31,7 @@ export default function Dropdown({ value, options, onChange, accentColor = 'var(
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: 'transparent', border: 'none', cursor: 'pointer',
-          padding: '12px 16px', borderRadius: '16px',
+          padding: '8px 14px', borderRadius: '12px',
           color: 'white', fontWeight: '800', fontSize: '20px',
           transition: 'background 0.2s',
         }}
@@ -50,14 +50,14 @@ export default function Dropdown({ value, options, onChange, accentColor = 'var(
 
       {/* Menu */}
       <div style={{
-        position: 'fixed', top: buttonRect.bottom ? buttonRect.bottom + 6 : 0, left: buttonRect.left, width: buttonRect.width, zIndex: 99999,
+        position: 'fixed', top: buttonRect.bottom ? buttonRect.bottom + 8 : 0, left: buttonRect.left, minWidth: buttonRect.width, zIndex: 99999,
         background: '#0f172a',
         border: '1px solid rgba(255,255,255,0.08)',
         borderRadius: '14px',
         boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
         // Animate open/close
         opacity:    open ? 1 : 0,
-        transform:  open ? 'translateY(0)' : 'translateY(-8px)',
+        transform:  open ? 'translateY(0) translateX(0)' : 'translateY(-8px) translateX(0)',
         pointerEvents: open ? 'auto' : 'none',
         transition: 'opacity 0.18s ease, transform 0.18s ease',
       }}>

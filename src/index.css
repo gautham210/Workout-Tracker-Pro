@@ -82,7 +82,6 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-soft);
   position: relative;
-  overflow: hidden;
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   z-index: 1; /* Above particles */
 }
@@ -205,7 +204,7 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
   flex: 1;
   max-width: 900px;
   margin: 0 auto;
-  padding: 20px 16px 68px 16px;
+  padding: 16px 16px 40px 16px;
   width: 100%;
   position: relative;
   z-index: 10;
@@ -232,7 +231,7 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: space-around;
-  padding: 16px 0 calc(16px + env(safe-area-inset-bottom));
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
   z-index: 100;
 }
 
@@ -272,9 +271,9 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
 }
 
 @media (max-width: 767px) {
-  .nav-item { flex-direction: column; font-size: 11px; gap: 6px; }
+  .nav-item { flex-direction: column; font-size: 10px; gap: 2px; }
   .nav-item.active::after {
-    bottom: -6px; left: 20%; right: 20%; height: 3px;
+    bottom: -4px; left: 20%; right: 20%; height: 3px;
   }
 }
 
@@ -286,11 +285,11 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
 
 @media (max-width: 768px) {
   .title { font-size: 22px !important; margin-bottom: 16px !important; }
-  h3 { font-size: 16px !important; }
-  .btn-primary, .btn-secondary { padding: 14px 20px !important; font-size: 14px !important; }
-  .input-minimal, .input-style { font-size: 16px !important; padding: 12px 16px !important; }
-  .card, .glass.card { padding: 14px !important; }
-  .flex-between { padding: 14px !important; }
-  .interactive-card { padding: 14px !important; }
-  .btn { padding: 14px 20px !important; }
+  h3 { font-size: 15px !important; }
+  .btn-primary, .btn-secondary { padding: 12px 20px !important; font-size: 14px !important; height: 48px !important; }
+  .input-minimal, .input-style { font-size: 16px !important; padding: 10px 16px !important; height: 44px !important; }
+  .card, .glass.card { padding: 12px !important; }
+  .flex-between { padding: 12px !important; }
+  .interactive-card { padding: 12px !important; }
+  .btn { padding: 12px 20px !important; height: 48px !important; }
 }

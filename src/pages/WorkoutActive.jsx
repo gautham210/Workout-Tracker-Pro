@@ -439,14 +439,12 @@ export default function WorkoutActive() {
           .date-chip.changed { border-color:var(--accent-color); background:rgba(0,122,255,0.1); }
           .date-input-hidden { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
 
-          .conclude-wrapper { position: fixed; bottom: 110px; left: 0; right: 0; padding: 0 20px; z-index: 50; display: flex; justify-content: center; pointer-events: none; max-width: 1100px; margin: 0 auto; }
-          @media (max-width: 768px) {
-            .conclude-wrapper { position: sticky !important; bottom: 20px !important; margin-top: 20px; }
-            .page-enter { padding-bottom: 140px !important; }
-            h3 { font-size: 18px !important; }
-            .title { font-size: 20px !important; }
-            .glass.card, .flex-between { padding: 16px !important; }
-            .btn-primary, .btn-secondary { padding-top: 14px !important; padding-bottom: 14px !important; font-size: 18px !important; }
+          .conclude-wrapper {
+            position: sticky;
+            bottom: 16px;
+            margin-top: 24px;
+            padding-bottom: 24px;
+            left: 0; right: 0; padding: 0 20px; z-index: 50; display: flex; justify-content: center; pointer-events: none; max-width: 1100px; margin: 0 auto;
           }
         `}
       </style>
@@ -600,14 +598,12 @@ export default function WorkoutActive() {
             </div>
           ))}
 
-          {sessionExercises.length > 0 && (
-            <button onClick={() => setIsSearching(true)} style={{ width: '100%', padding: '16px', background: 'transparent', border: '1px dashed rgba(0,122,255,0.3)', borderRadius: '16px', color: 'var(--accent-hover)', fontWeight: '800', cursor: 'pointer', marginTop: '16px', fontSize: '16px' }}>+ Add Another Exercise</button>
-          )}
+
         </div>
       )}
 
-      <button className="btn-secondary interactive-card" onClick={() => setIsSearching(true)} style={{ width: '100%', border: '1px solid rgba(0,122,255,0.3)', background: 'rgba(0, 122, 255, 0.05)', padding: '24px', fontSize: '18px', display: 'flex', justifyContent: 'center', color: 'white', fontWeight: '800', borderRadius: '24px' }}>
-        <Plus size={24} color="var(--accent-hover)" style={{ marginRight: '8px' }} /> Add Exercise
+      <button className="btn-secondary interactive-card" onClick={() => setIsSearching(true)} style={{ width: '100%', border: '1px solid rgba(0,122,255,0.3)', background: 'rgba(0, 122, 255, 0.05)', padding: '14px', fontSize: '16px', display: 'flex', justifyContent: 'center', color: 'white', fontWeight: '800', borderRadius: '24px', marginBottom: '16px', marginTop: '20px' }}>
+        <Plus size={20} color="var(--accent-hover)" style={{ marginRight: '8px' }} /> + Add Exercise
       </button>
 
       {/* Inline save error */}
@@ -619,7 +615,7 @@ export default function WorkoutActive() {
 
       {sessionExercises.length > 0 && (
         <div className="conclude-wrapper">
-          <button className="btn-primary" style={{ padding: '20px 48px', fontSize: '20px', borderRadius: '100px', pointerEvents: 'auto', display: 'flex', gap: '12px', minWidth: '300px' }} onClick={handleSave} disabled={saving}>
+          <button className="btn-primary" style={{ padding: '14px 48px', fontSize: '16px', borderRadius: '100px', pointerEvents: 'auto', display: 'flex', gap: '12px', minWidth: '300px', boxShadow: '0 4px 12px rgba(0, 122, 255, 0.2)' }} onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Check size={24} />} {saving ? 'Saving...' : 'Conclude Session'}
           </button>
         </div>
