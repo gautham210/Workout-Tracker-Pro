@@ -11,15 +11,28 @@ function AICoach() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
-  const [messages, setMessages]   = useState([
-    {
-      role:    'assistant',
-      content: "Hello! I am your AI Gym Coach. I have analyzed your fitness context and database history.\n\nAsk me anything about your splits, suggestions for progressive overload, recovery gaps, or high-protein macro targets!",
-    }
-  ]);
+  const [messages, setMessages]   = useState(() => {
+    try {
+      const cached = localStorage.getItem('wtp_coach_chat_history');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return [
+      {
+        role:    'assistant',
+        content: "Hello! I am your AI Gym Coach. I have analyzed your fitness context and database history.\n\nAsk me anything about your splits, suggestions for progressive overload, recovery gaps, or high-protein macro targets!",
+      }
+    ];
+  });
   const [inputText, setInputText] = useState('');
   const [loading, setLoading]     = useState(false);
   const [applying, setApplying]   = useState(false);
+
+  // Cache the chat history locally on every message state update
+  useEffect(() => {
+    try {
+      localStorage.setItem('wtp_coach_chat_history', JSON.stringify(messages));
+    } catch (e) {}
+  }, [messages]);
 
   // Training Context gathered from Supabase
   const [context, setContext] = useState(null);
@@ -195,7 +208,12 @@ function AICoach() {
 
     try {
       const builtExercises = await Promise.all(
-        suggestedWorkout.exercises.map(async (name) => {
+        suggestedWorkout.exercises.map(async (item) => {
+          // Resolve item name (can be string or object)
+          const name = typeof item === 'object' && item !== null ? item.name : item;
+          const aiWeight = typeof item === 'object' && item !== null ? item.weight : null;
+          const aiReps = typeof item === 'object' && item !== null ? item.reps : null;
+
           // 1. Resolve exercise in database
           let exerciseObj = null;
           try {
@@ -214,6 +232,8 @@ function AICoach() {
 
           // 2. Fetch user's absolute best set performance for suggestion display
           let suggestedPerformance = null;
+          let bestWeight = null;
+          let bestReps = null;
           try {
             const { data: bestSets } = await supabase
               .from('sets')
@@ -226,16 +246,23 @@ function AICoach() {
               .single();
 
             if (bestSets) {
+              bestWeight = bestSets.weight_kg;
+              bestReps = bestSets.reps;
               suggestedPerformance = `${bestSets.weight_kg}kg × ${bestSets.reps}`;
             }
           } catch { /* no previous data */ }
 
+          // Resolve targets: AI explicit > User Best Performance > default values
+          const targetObj = suggestedWorkout.targets?.[name];
+          const finalSuggestedWeight = targetObj?.weight ?? aiWeight ?? bestWeight ?? '';
+          const finalSuggestedReps = targetObj?.reps ?? aiReps ?? bestReps ?? '12';
+
           return {
             exercise: exerciseObj,
             sets: [
-              { weight_kg: '', reps: '15' },
-              { weight_kg: '', reps: '15' },
-              { weight_kg: '', reps: '15' }
+              { weight_kg: '', reps: '', suggestedWeight: String(finalSuggestedWeight), suggestedReps: String(finalSuggestedReps) },
+              { weight_kg: '', reps: '', suggestedWeight: String(finalSuggestedWeight), suggestedReps: String(finalSuggestedReps) },
+              { weight_kg: '', reps: '', suggestedWeight: String(finalSuggestedWeight), suggestedReps: String(finalSuggestedReps) }
             ],
             suggestedPerformance
           };

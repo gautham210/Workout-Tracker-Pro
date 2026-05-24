@@ -312,7 +312,18 @@ export default function WorkoutActive() {
     setSessionExercises(prev => prev.map((item, i) => {
       if (i !== exIndex) return item;
       const last = item.sets[item.sets.length - 1];
-      return { ...item, sets: [...item.sets, { weight_kg: last?.weight_kg ?? '', reps: '' }] };
+      return {
+        ...item,
+        sets: [
+          ...item.sets,
+          {
+            weight_kg: last?.weight_kg ?? '',
+            reps: '',
+            suggestedWeight: last?.suggestedWeight ?? '',
+            suggestedReps: last?.suggestedReps ?? ''
+          }
+        ]
+      };
     }));
   };
 
@@ -344,6 +355,20 @@ export default function WorkoutActive() {
 
   const removeExercise = (exIndex) => {
     setSessionExercises(prev => prev.filter((_, i) => i !== exIndex));
+  };
+
+  const autofillExerciseTargets = (exIdx) => {
+    setSessionExercises(prev => prev.map((item, i) => {
+      if (i !== exIdx) return item;
+      return {
+        ...item,
+        sets: item.sets.map(s => ({
+          ...s,
+          weight_kg: s.suggestedWeight && s.weight_kg === '' ? String(s.suggestedWeight) : s.weight_kg,
+          reps: s.suggestedReps && s.reps === '' ? String(s.suggestedReps) : s.reps
+        }))
+      };
+    }));
   };
 
   // ── Save session ──────────────────────────────────────────────────────────
@@ -691,39 +716,85 @@ export default function WorkoutActive() {
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'16px' }}>
-          {sessionExercises.map((item, exIdx) => (
-            <div key={exIdx} className="glass card animate-fade-in" style={{ padding:'0', overflow:'hidden', margin:0 }}>
-              <div style={{ padding:'18px 20px', background:'rgba(255,255,255,0.02)', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div>
-                  <h3 className="ex-name" style={{ margin:0, color:'#fff', fontSize:'19px', fontWeight:'800', letterSpacing:'-0.3px' }}>{item.exercise.name}</h3>
-                  {item.fromLoop && lastWeights[item.exercise.id] && (
-                    <div style={{ fontSize:'11px', color:'var(--text-secondary)', fontWeight:'600', marginTop:'3px' }}>
-                      Last: {lastWeights[item.exercise.id].weight}kg × {lastWeights[item.exercise.id].reps}
-                    </div>
-                  )}
-                  {item.suggestedPerformance && (
-                    <div style={{ fontSize:'11px', color:'var(--accent-hover)', fontWeight:'700', marginTop:'3px' }}>
-                      Suggested based on previous performance: {item.suggestedPerformance}
-                    </div>
-                  )}
+          {sessionExercises.map((item, exIdx) => {
+            const hasSuggestions = item.sets.some(s => s.suggestedWeight || s.suggestedReps);
+            const needsAutofill = item.sets.some(s => (s.suggestedWeight && s.weight_kg === '') || (s.suggestedReps && s.reps === ''));
+
+            return (
+              <div key={exIdx} className="glass card animate-fade-in" style={{ padding:'0', overflow:'hidden', margin:0 }}>
+                <div style={{ padding:'18px 20px', background:'rgba(255,255,255,0.02)', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <h3 className="ex-name" style={{ margin:0, color:'#fff', fontSize:'19px', fontWeight:'800', letterSpacing:'-0.3px' }}>{item.exercise.name}</h3>
+                    {item.fromLoop && lastWeights[item.exercise.id] && (
+                      <div style={{ fontSize:'11px', color:'var(--text-secondary)', fontWeight:'600', marginTop:'3px' }}>
+                        Last: {lastWeights[item.exercise.id].weight}kg × {lastWeights[item.exercise.id].reps}
+                      </div>
+                    )}
+                    {item.suggestedPerformance && (
+                      <div style={{ fontSize:'11px', color:'var(--accent-hover)', fontWeight:'700', marginTop:'3px' }}>
+                        Suggested based on previous performance: {item.suggestedPerformance}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {hasSuggestions && needsAutofill && (
+                      <button
+                        onClick={() => autofillExerciseTargets(exIdx)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'rgba(37,99,235,0.1)',
+                          border: '1px solid rgba(37,99,235,0.3)',
+                          color: 'var(--accent-hover)',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          marginRight: '8px',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseOver={e => e.currentTarget.style.background = 'rgba(37,99,235,0.2)'}
+                        onMouseOut={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}
+                      >
+                        <Zap size={12} /> Auto-fill Targets
+                      </button>
+                    )}
+                    <button
+                      onClick={() => removeExercise(exIdx)}
+                      style={{ background:'none', border:'none', padding:'8px', cursor:'pointer', color:'var(--text-secondary)', display:'flex', borderRadius:'8px', transition:'background 0.2s' }}
+                      onMouseOver={e => { e.currentTarget.style.background='rgba(255,69,58,0.1)'; e.currentTarget.style.color='var(--error-color)'; }}
+                      onMouseOut={e  => { e.currentTarget.style.background='none'; e.currentTarget.style.color='var(--text-secondary)'; }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => removeExercise(exIdx)}
-                  style={{ background:'none', border:'none', padding:'8px', cursor:'pointer', color:'var(--text-secondary)', display:'flex', borderRadius:'8px', transition:'background 0.2s' }}
-                  onMouseOver={e => { e.currentTarget.style.background='rgba(255,69,58,0.1)'; e.currentTarget.style.color='var(--error-color)'; }}
-                  onMouseOut={e  => { e.currentTarget.style.background='none'; e.currentTarget.style.color='var(--text-secondary)'; }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
 
               <div style={{ padding:'16px 20px' }}>
                 {item.sets.map((setInfo, setIdx) => (
                   <div key={setIdx} style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
                     <div className="set-label" style={{ width:'36px', fontWeight:'800', color:'var(--text-secondary)', fontSize:'14px', flexShrink:0 }}>S{setIdx + 1}</div>
-                    <div style={{ flex:1, display:'flex', alignItems:'center', background:'rgba(0,0,0,0.35)', borderRadius:'14px', padding:'5px 14px', border:'1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: 'rgba(0,0,0,0.35)',
+                      borderRadius: '14px',
+                      padding: '5px 14px',
+                      border: (setInfo.suggestedWeight || setInfo.suggestedReps) && (setInfo.weight_kg === '' && setInfo.reps === '')
+                        ? '1px dashed rgba(37,99,235,0.5)'
+                        : '1px solid rgba(255,255,255,0.05)',
+                      boxShadow: (setInfo.suggestedWeight || setInfo.suggestedReps) && (setInfo.weight_kg === '' && setInfo.reps === '')
+                        ? '0 0 10px rgba(37,99,235,0.05)'
+                        : 'none',
+                      transition: 'border 0.2s, box-shadow 0.2s'
+                    }}>
                       <input
-                        type="number" placeholder="0" value={setInfo.weight_kg}
+                        type="number"
+                        placeholder={setInfo.suggestedWeight || "0"}
+                        value={setInfo.weight_kg}
                         onChange={e => updateSet(exIdx, setIdx, 'weight_kg', e.target.value)}
                         className="set-row-input"
                         inputMode="decimal"
@@ -731,7 +802,9 @@ export default function WorkoutActive() {
                       <span className="unit-label" style={{ color:'var(--text-secondary)', marginLeft:'6px', fontSize:'13px', marginRight:'14px', fontWeight:'700', flexShrink:0 }}>kg</span>
                       <span style={{ color:'var(--accent-hover)', fontWeight:'800', fontSize:'16px', flexShrink:0 }}>×</span>
                       <input
-                        type="number" placeholder="0" value={setInfo.reps}
+                        type="number"
+                        placeholder={setInfo.suggestedReps || "0"}
+                        value={setInfo.reps}
                         onChange={e => updateSet(exIdx, setIdx, 'reps', e.target.value)}
                         className="set-row-input"
                         inputMode="numeric"
@@ -746,9 +819,10 @@ export default function WorkoutActive() {
                 <button onClick={() => addSet(exIdx)} style={{ width:'100%', padding:'13px', background:'transparent', border:'1px dashed rgba(255,255,255,0.12)', borderRadius:'14px', color:'var(--text-secondary)', fontWeight:'700', cursor:'pointer', marginTop:'8px', fontSize:'14px' }}>
                   + Add Set
                 </button>
-              </div>
             </div>
-          ))}
+          </div>
+        );
+      })}
         </div>
       )}
 
