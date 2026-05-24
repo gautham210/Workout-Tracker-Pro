@@ -40,13 +40,6 @@ export default function Analytics() {
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
-      console.log('[ANALYTICS FETCH]', {
-        count: sessions?.length ?? 0,
-        error: error?.message,
-        code:  error?.code,
-        sample: sessions?.[0],
-      });
-
       if (error) {
         setFetchError(error.message);
         setLoading(false);
@@ -99,14 +92,6 @@ export default function Analytics() {
             }
           });
         });
-      });
-
-      console.log('[ANALYTICS COMPUTED]', {
-        totalVolume,
-        hasSets,
-        exerciseFreq,
-        muscleVolume,
-        exerciseMaxW,
       });
 
       if (!hasSets) {

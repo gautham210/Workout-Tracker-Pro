@@ -53,7 +53,6 @@ function computeStreak(sessions, includeRestDays, restDays) {
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  console.log('[STREAK]', { streak, dateSetSize: dateSet.size });
   return streak;
 }
 
@@ -174,7 +173,6 @@ export default function Dashboard() {
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
-      console.log('[DASHBOARD] sessions:', { count: data?.length, error: error?.message });
       if (data) setSessions(data);
       setLoading(false);
     };

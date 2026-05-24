@@ -99,9 +99,7 @@ export default function Profile() {
       active_loop:  activeLoop,
     };
 
-    console.log('[PROFILE SAVE]', payload);
     const { data, error } = await supabase.from('profiles').update(payload).eq('id', user.id).select().single();
-    console.log('[PROFILE SAVE result]', { data, error: error?.message });
 
     if (error) { setSaveError(`Failed: ${error.message}`); setSaving(false); return; }
     await refreshProfile();
@@ -142,7 +140,6 @@ export default function Profile() {
       start_date: new Date().toISOString().split('T')[0],
     };
     const { error } = await supabase.from('profiles').update({ active_loop: loop }).eq('id', user.id);
-    console.log('[LOOP ACTIVATE]', { loop, error: error?.message });
     if (!error) { setActiveLoop(loop); await refreshProfile(); }
     setLoopSaving(false);
   };
@@ -153,15 +150,12 @@ export default function Profile() {
     setLoopSaving(true);
     setLoopGenMsg(null);
 
-    // Fetch last 6 sessions with their exercises
     const { data: sessions, error } = await supabase
       .from('workout_sessions')
       .select('id, split_day, split_type, session_exercises(exercise_id)')
       .eq('user_id', user.id)
       .order('date', { ascending: false })
       .limit(6);
-
-    console.log('[LOOP GEN] sessions:', sessions?.length, error?.message);
 
     if (error || !sessions?.length) {
       setLoopGenMsg('No session history found.');
@@ -202,8 +196,6 @@ export default function Profile() {
       .from('profiles')
       .update({ active_loop: loop })
       .eq('id', user.id);
-
-    console.log('[LOOP GEN] saved:', { days: days.length, saveErr: saveErr?.message });
 
     if (!saveErr) {
       setActiveLoop(loop);

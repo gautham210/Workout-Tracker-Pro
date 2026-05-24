@@ -70,9 +70,7 @@ export default function WorkoutActive() {
   const [workoutDate,       setWorkoutDate]       = useState(todayLocalISO);
   const dateInputRef = useRef(null);
 
-  // ── Resume banner state ───────────────────────────────────────────────────
-  const [showResumeBanner, setShowResumeBanner] = useState(false);
-  const [pendingDraft,     setPendingDraft]     = useState(null);
+  // ── Resume & Scroll tracking ──────────────────────────────────────────────
   const resumeCheckedRef = useRef(false);
 
   // ── Search state ──────────────────────────────────────────────────────────
@@ -103,17 +101,43 @@ export default function WorkoutActive() {
     return () => { document.body.style.background = 'var(--bg-color)'; };
   }, []);
 
-  // ── Check for draft on mount (once) ──────────────────────────────────────
+  // ── Check and restore draft on mount ──────────────────────────────────────
   useEffect(() => {
     if (!user || resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
 
     const draft = loadDraft(user.id);
     if (draft) {
-      setPendingDraft(draft);
-      setShowResumeBanner(true);
+      setSplitType(draft.splitType ?? 'PPL');
+      setSplitDay(draft.splitDay   ?? 'Push');
+      setWorkoutDate(draft.workoutDate ?? todayLocalISO());
+      setSessionExercises(draft.sessionExercises ?? []);
     }
   }, [user]);
+
+  // ── Restore scroll position on draft load ─────────────────────────────────
+  useEffect(() => {
+    if (sessionExercises.length > 0) {
+      const savedScroll = localStorage.getItem('wtp_active_scroll');
+      if (savedScroll) {
+        const timer = setTimeout(() => {
+          window.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [sessionExercises.length]);
+
+  // ── Save scroll position on scroll ────────────────────────────────────────
+  useEffect(() => {
+    const handleScroll = () => {
+      if (sessionExercises.length > 0) {
+        localStorage.setItem('wtp_active_scroll', String(window.scrollY));
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [sessionExercises.length]);
 
   // ── Autosave: debounced whenever session state changes ────────────────────
   const autosave = useCallback(() => {
@@ -121,6 +145,7 @@ export default function WorkoutActive() {
     // Don't save if nothing meaningful exists
     if (sessionExercises.length === 0) {
       clearDraft();
+      localStorage.removeItem('wtp_active_scroll');
       return;
     }
     clearTimeout(autosaveTimerRef.current);
@@ -131,7 +156,7 @@ export default function WorkoutActive() {
         workoutDate,
         sessionExercises,
       });
-    }, 800); // 800ms debounce — avoids saving every keystroke
+    }, 800); // 800ms debounce
   }, [user, splitType, splitDay, workoutDate, sessionExercises]);
 
   useEffect(() => {
@@ -139,28 +164,11 @@ export default function WorkoutActive() {
     return () => clearTimeout(autosaveTimerRef.current);
   }, [autosave]);
 
-  // ── Resume handlers ───────────────────────────────────────────────────────
-  const handleResume = () => {
-    if (!pendingDraft) return;
-    setSplitType(pendingDraft.splitType ?? 'PPL');
-    setSplitDay(pendingDraft.splitDay   ?? 'Push');
-    setWorkoutDate(pendingDraft.workoutDate ?? todayLocalISO());
-    setSessionExercises(pendingDraft.sessionExercises ?? []);
-    setShowResumeBanner(false);
-    setPendingDraft(null);
-  };
-
-  const handleDiscard = () => {
-    clearDraft();
-    setShowResumeBanner(false);
-    setPendingDraft(null);
-  };
-
   // ── Loop template preload ─────────────────────────────────────────────────
   useEffect(() => {
     if (!profile?.active_loop || !user) return;
-    // Don't overwrite a resumed draft
-    if (showResumeBanner) return;
+    // Don't overwrite an active session in progress
+    if (sessionExercises.length > 0) return;
     const loop = profile.active_loop;
     const days = loop.days ?? [];
     if (!days.length) return;
@@ -236,7 +244,7 @@ export default function WorkoutActive() {
 
     preload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, user, loopTrigger, showResumeBanner]);
+  }, [profile, user, loopTrigger]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const effectiveDays = splitType === 'Custom'
@@ -622,29 +630,7 @@ export default function WorkoutActive() {
       {/* ── Header ── */}
       <div style={{ marginTop:'16px', marginBottom:'24px' }}>
 
-        {/* ── Resume banner ── */}
-        {showResumeBanner && pendingDraft && (
-          <div className="resume-banner">
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:'800', fontSize:'15px', color:'white', marginBottom:'4px' }}>
-                Resume unfinished workout?
-              </div>
-              <div style={{ fontSize:'12px', color:'var(--text-secondary)', fontWeight:'600' }}>
-                {pendingDraft.splitType} — {pendingDraft.splitDay} · {pendingDraft.sessionExercises?.length} exercise{pendingDraft.sessionExercises?.length !== 1 ? 's' : ''} · saved {new Date(pendingDraft.savedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}
-              </div>
-            </div>
-            <div className="resume-banner-btns" style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-              <button onClick={handleDiscard} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.12)', borderRadius:'10px', color:'var(--text-secondary)', padding:'8px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}>
-                Discard
-              </button>
-              <button onClick={handleResume} style={{ background:'rgba(0,122,255,0.15)', border:'1px solid rgba(0,122,255,0.4)', borderRadius:'10px', color:'var(--accent-hover)', padding:'8px 14px', fontSize:'13px', fontWeight:'800', cursor:'pointer' }}>
-                Continue ↗
-              </button>
-            </div>
-          </div>
-        )}
-
-        {loopDayName && !showResumeBanner && (
+        {loopDayName && (
           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px', padding:'7px 12px', background:'rgba(48,209,88,0.07)', border:'1px solid rgba(48,209,88,0.2)', borderRadius:'10px' }}>
             <Repeat size={12} color="#30D158" />
             <span style={{ fontSize:'11px', fontWeight:'700', color:'#30D158', letterSpacing:'1px', textTransform:'uppercase' }}>From your active program</span>

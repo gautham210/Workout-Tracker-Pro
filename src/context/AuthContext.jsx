@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, resetNetworkCooldown } from '../lib/supabase';
 
 const AuthContext = createContext({});
 
-// Events that mean "the user has genuinely changed" — require a profile re-fetch
+// Events that mean "the user has genuinely changed" — require a profile check
 const USER_CHANGE_EVENTS = new Set(['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY']);
 
 // Events that are safe to skip profile re-fetch (token silently refreshed, same user)
@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   const fetchingRef         = useRef(false); // deduplicate in-flight fetch
   const lastUserIdRef       = useRef(null);  // skip fetch if same user
   const lastFetchedAtRef    = useRef(0);     // timestamp of last successful fetch
-  const initDoneRef         = useRef(false); // getSession already called
+  const lastProcessedTokenRef = useRef(null); // memoize last processed access token
 
   // Called once on unmount to stop all state updates
   useEffect(() => {
@@ -49,7 +49,6 @@ export const AuthProvider = ({ children }) => {
     const sameUser   = lastUserIdRef.current === sessionUser.id;
     const cacheWarm  = Date.now() - lastFetchedAtRef.current < PROFILE_CACHE_TTL;
     if (sameUser && cacheWarm && !force) {
-      // Just make sure user/loading state is correct without re-fetching
       if (mountedRef.current) {
         setUser(sessionUser);
         setLoading(false);
@@ -62,11 +61,10 @@ export const AuthProvider = ({ children }) => {
     fetchingRef.current = true;
 
     // Offline guard — don't retry when we know we're offline
-    if (!navigator.onLine) {
-      console.warn('[AuthContext] Device is offline — skipping profile fetch');
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.warn('[AUTH] Device is offline — skipping profile fetch');
       if (mountedRef.current) {
         setUser(sessionUser);
-        // Keep existing profile if we have one from cache
         setLoading(false);
         setNetworkError('offline');
       }
@@ -112,7 +110,7 @@ export const AuthProvider = ({ children }) => {
             lastFetchedAtRef.current = Date.now();
           }
         } else {
-          console.error('[AuthContext] Profile insert failed:', insertError.message);
+          console.error('[AUTH] Profile insert failed:', insertError.message);
           if (mountedRef.current) {
             setUser(sessionUser);
             setProfile(null);
@@ -125,7 +123,7 @@ export const AuthProvider = ({ children }) => {
 
       // Network / DNS error
       if (error?.message?.includes('fetch') || error?.message?.includes('network') || error?.message?.includes('Failed')) {
-        console.error('[AuthContext] Network error fetching profile:', error.message);
+        console.error('[AUTH] Network error fetching profile:', error.message);
         if (mountedRef.current) {
           setUser(sessionUser);
           setLoading(false);
@@ -136,7 +134,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (error) {
-        console.error('[AuthContext] Profile error:', error.code, error.message);
+        console.error('[AUTH] Profile error:', error.code, error.message);
         if (mountedRef.current) {
           setUser(sessionUser);
           setProfile(null);
@@ -155,8 +153,7 @@ export const AuthProvider = ({ children }) => {
         lastFetchedAtRef.current = Date.now();
       }
     } catch (err) {
-      // Catches ERR_NAME_NOT_RESOLVED, fetch aborted, etc.
-      console.error('[AuthContext] Fetch threw:', err.message);
+      console.error('[AUTH] Fetch threw:', err.message);
       if (mountedRef.current) {
         setUser(prev => prev ?? sessionUser);
         setLoading(false);
@@ -167,38 +164,46 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // ── Initial session + auth state listener ─────────────────────────────────
+  // ── StrictMode-Safe Auth State Listener ──────────────────────────────────
   useEffect(() => {
-    if (initDoneRef.current) return; // StrictMode double-invoke guard
-    initDoneRef.current = true;
+    let active = true;
 
-    // 1. Get current session once
+    // 1. Initial session check
     supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!active) return;
       if (error) {
-        console.error('[AuthContext] getSession error:', error.message);
-        if (mountedRef.current) setLoading(false);
+        console.error('[AUTH] getSession error:', error.message);
+        setLoading(false);
         return;
       }
-      fetchProfile(session?.user ?? null);
+
+      if (session?.user) {
+        lastProcessedTokenRef.current = session.access_token;
+        fetchProfile(session.user);
+      } else {
+        setLoading(false);
+      }
     });
 
     // 2. Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mountedRef.current) return;
+      if (!active || !mountedRef.current) return;
 
-      // For silent events (token refresh), only update user state if we don't
-      // already have one — never re-fetch profile or flicker loading
-      if (SILENT_EVENTS.has(event)) {
-        if (session?.user && !lastUserIdRef.current) {
-          // First-time init via INITIAL_SESSION
-          fetchProfile(session.user);
-        }
-        // Token refresh while logged in — do nothing (Supabase handles token storage)
+      const currentToken = session?.access_token ?? null;
+      const currentUser = session?.user ?? null;
+
+      // ── Deduplicate auth listener triggers ────────────────────────────────
+      // If the session token and user ID are identical to the last processed ones,
+      // skip completely to prevent token refresh storms and redundant fetches.
+      if (lastProcessedTokenRef.current === currentToken && lastUserIdRef.current === currentUser?.id) {
         return;
       }
 
-      // SIGNED_OUT — clear everything
-      if (event === 'SIGNED_OUT' || !session?.user) {
+      console.log(`[AUTH] State Change -> Event: ${event}, User: ${currentUser?.id ?? 'none'}`);
+      lastProcessedTokenRef.current = currentToken;
+
+      // SIGNED_OUT — clear auth context silently
+      if (event === 'SIGNED_OUT' || !currentUser) {
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -209,34 +214,55 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // SIGNED_IN / USER_UPDATED — always re-fetch
+      // Silent token refresh
+      if (SILENT_EVENTS.has(event)) {
+        if (!lastUserIdRef.current || lastUserIdRef.current !== currentUser.id) {
+          fetchProfile(currentUser);
+        } else {
+          setUser(currentUser); // Update user info without profile re-fetch or loading state flicker
+        }
+        return;
+      }
+
+      // SIGNED_IN / USER_UPDATED
       if (USER_CHANGE_EVENTS.has(event)) {
-        fetchingRef.current      = false; // allow fresh fetch
-        lastFetchedAtRef.current = 0;     // bust cache
-        fetchProfile(session.user, { force: true });
+        // Only force profile re-fetch if the user actually changed or we do not have a profile yet
+        const forceFetch = lastUserIdRef.current !== currentUser.id || !profile;
+        fetchProfile(currentUser, { force: forceFetch });
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile, profile]);
 
-  // ── Online recovery ────────────────────────────────────────────────────────
-  // When the device comes back online, retry the profile fetch if it failed
+  // ── Network recovery and Tab Focus triggers ───────────────────────────────
+  // Automatically clear custom fetch cooldowns when restoring network or returning to page
   useEffect(() => {
-    const handleOnline = () => {
+    const handleReconnectOrFocus = () => {
+      console.log('[AUTH] App focused/reconnected. Cleaning cooldowns.');
+      resetNetworkCooldown();
+
       if (networkError && user) {
-        console.log('[AuthContext] Back online — retrying profile fetch');
         setNetworkError(null);
         fetchingRef.current      = false;
         lastFetchedAtRef.current = 0;
         fetchProfile(user, { force: true });
       }
     };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
+
+    window.addEventListener('online', handleReconnectOrFocus);
+    window.addEventListener('focus', handleReconnectOrFocus);
+
+    return () => {
+      window.removeEventListener('online', handleReconnectOrFocus);
+      window.removeEventListener('focus', handleReconnectOrFocus);
+    };
   }, [networkError, user, fetchProfile]);
 
-  // ── Called after mutations to sync profile ────────────────────────────────
+  // ── Manual Profile synchronizer ──────────────────────────────────────────
   const refreshProfile = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;

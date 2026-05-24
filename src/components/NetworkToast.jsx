@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { WifiOff, Wifi, RefreshCw, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { resetNetworkCooldown } from '../lib/supabase';
 
 /**
  * NetworkToast
@@ -9,6 +11,7 @@ import { WifiOff, Wifi, RefreshCw, X } from 'lucide-react';
  * to show a Supabase-specific reconnect prompt.
  */
 export default function NetworkToast({ supabaseError }) {
+  const { refreshProfile } = useAuth();
   const [isOnline,     setIsOnline]     = useState(navigator.onLine);
   const [showBack,     setShowBack]     = useState(false);
   const [dismissed,   setDismissed]    = useState(false);
@@ -43,8 +46,15 @@ export default function NetworkToast({ supabaseError }) {
     try {
       // Try a lightweight network probe
       await fetch('https://dns.google/resolve?name=supabase.com&type=A', { mode: 'cors', cache: 'no-store', signal: AbortSignal.timeout(4000) });
-      window.location.reload();
-    } catch {
+      
+      // Clear network fetch cooldowns and re-sync auth profile without page refresh
+      console.log('[NETWORK] Manual retry successful. Syncing profile.');
+      resetNetworkCooldown();
+      await refreshProfile();
+      setDismissed(true);
+    } catch (err) {
+      console.error('[NETWORK] Manual reconnect probe failed:', err.message);
+    } finally {
       setRetrying(false);
     }
   };

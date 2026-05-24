@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -83,4 +84,4 @@ const MainLayout = () => {
   );
 };
 
-export default MainLayout;
+export default memo(MainLayout);

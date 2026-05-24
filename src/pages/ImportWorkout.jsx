@@ -137,10 +137,11 @@ export default function ImportWorkout() {
     } catch { /* non-critical */ }
 
     try {
+      console.log('[AI_IMPORT] Sending raw text for parsing.');
       const res = await fetch('/api/parse-workout', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text: rawText, exercises: exerciseNames }),
+        body:    JSON.stringify({ rawText, exercises: exerciseNames }),
       });
 
       const json = await res.json();
@@ -151,12 +152,8 @@ export default function ImportWorkout() {
 
       setParsed(json);
 
-      // Pre-fill resolutions for high-confidence ambiguities
-      const preResolved = {};
-      (json.ambiguous ?? []).forEach(a => {
-        if (a.options?.length > 0) preResolved[a.raw] = a.options[0];
-      });
-      setResolutions(preResolved);
+      // Require user interaction for disambiguating low-confidence/ambiguous exercises
+      setResolutions({});
 
       // Skip clarify step if no ambiguities
       setStep(json.ambiguous?.length > 0 ? 'clarify' : 'preview');

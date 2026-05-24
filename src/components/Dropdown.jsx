@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -13,7 +13,7 @@ import { ChevronDown } from 'lucide-react';
  *  - Viewport right-edge detection → shifts left when menu would overflow
  *  - Stable outside-click detection that handles the portal correctly
  */
-export default function Dropdown({ value, options, onChange, accentColor = 'var(--accent-hover)' }) {
+function Dropdown({ value, options, onChange, accentColor = 'var(--accent-hover)' }) {
   const [open, setOpen]         = useState(false);
   const [menuStyle, setMenuStyle] = useState({});
   const triggerRef              = useRef(null);
@@ -188,3 +188,5 @@ export default function Dropdown({ value, options, onChange, accentColor = 'var(
     </div>
   );
 }
+
+export default memo(Dropdown);

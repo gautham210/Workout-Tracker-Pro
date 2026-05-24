@@ -32,7 +32,6 @@ export default function Bodyweight() {
       .eq('user_id', user.id)
       .order('date', { ascending: false });
 
-    console.log('[BODYWEIGHT FETCH]', { count: data?.length, error: error?.message });
     if (data) setLogs(data);
     setLoading(false);
   };
@@ -55,8 +54,6 @@ export default function Bodyweight() {
     const dayPrefix = weightDate; // YYYY-MM-DD
     const existing  = logs.find(l => l.date?.startsWith(dayPrefix) || l.date?.slice(0, 10) === dayPrefix);
 
-    console.log('[BODYWEIGHT LOG]', { weightDate, dateISO, existingId: existing?.id });
-
     let error;
     if (existing) {
       // UPDATE silently — user is correcting that day's entry
@@ -64,13 +61,11 @@ export default function Bodyweight() {
         .from('bodyweight_logs')
         .update({ weight_kg: parseFloat(weightInput) })
         .eq('id', existing.id));
-      console.log('[BODYWEIGHT UPDATE]', { id: existing.id, error: error?.message });
     } else {
       // INSERT new entry
       ({ error } = await supabase
         .from('bodyweight_logs')
         .insert({ user_id: user.id, date: dateISO, weight_kg: parseFloat(weightInput) }));
-      console.log('[BODYWEIGHT INSERT]', { error: error?.message });
     }
 
     if (error) {
