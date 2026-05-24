@@ -46,23 +46,23 @@ function AICoach() {
 
     const gatherContext = async () => {
       try {
-        // 1. Fetch recent sessions
+        // 1. Fetch recent sessions (strictly limit to latest 3)
         const { data: rawSessions } = await supabase
           .from('workout_sessions')
           .select('id, date, split_type, split_day')
           .eq('user_id', user.id)
           .order('date', { ascending: false })
-          .limit(5);
+          .limit(3);
 
         const recentSessions = rawSessions ?? [];
 
-        // 2. Fetch bodyweight trends
+        // 2. Fetch bodyweight trends (strictly limit to latest 1 mass log)
         const { data: rawBW } = await supabase
           .from('bodyweight_logs')
           .select('date, weight_kg')
           .eq('user_id', user.id)
           .order('date', { ascending: false })
-          .limit(5);
+          .limit(1);
 
         const bodyweightTrends = rawBW ?? [];
 
@@ -74,14 +74,13 @@ function AICoach() {
           activeSplit = 'Custom Split';
         }
 
-        // 4. Fetch strongest lifts
-        // Let's get the max weight logged per exercise for up to 5 exercises
+        // 4. Fetch strongest lifts (strictly limit to top 5, slice top 3 unique milestone lifts)
         const { data: maxSets } = await supabase
           .from('sets')
           .select('weight_kg, reps, session_exercises!inner(exercise_id, exercises(name), workout_sessions!inner(user_id))')
           .eq('session_exercises.workout_sessions.user_id', user.id)
           .order('weight_kg', { ascending: false })
-          .limit(10);
+          .limit(5);
 
         const strongestLifts = [];
         const seenExercises = new Set();
@@ -120,7 +119,7 @@ function AICoach() {
           recentSessions,
           bodyweightTrends,
           activeSplit,
-          strongestLifts: strongestLifts.slice(0, 5),
+          strongestLifts: strongestLifts.slice(0, 3),
           recoveryGaps,
           consistency
         });
@@ -146,12 +145,30 @@ function AICoach() {
   // ── Send Message ──────────────────────────────────────────────────────────
   const handleSendMessage = async (e) => {
     e?.preventDefault();
-    if (!inputText.trim() || loading) return;
+    const promptText = inputText.trim();
+    if (!promptText || loading) return;
 
-    const userMessage = { role: 'user', content: inputText.trim() };
+    const userMessage = { role: 'user', content: promptText };
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
     setLoading(true);
+
+    // 1. Check prompt/response cache in localStorage with 1-hour TTL
+    try {
+      const cleanPrompt = promptText.toLowerCase().trim();
+      const rawCache = localStorage.getItem('wtp_coach_chat_cache');
+      const cacheMap = rawCache ? JSON.parse(rawCache) : {};
+      const cachedItem = cacheMap[cleanPrompt];
+
+      if (cachedItem && Date.now() - cachedItem.timestamp < 60 * 60 * 1000) {
+        // Natural brief loader delay to feel organic
+        setTimeout(() => {
+          setMessages(prev => [...prev, { role: 'assistant', content: cachedItem.response }]);
+          setLoading(false);
+        }, 500);
+        return;
+      }
+    } catch (e) {}
 
     try {
       const res = await fetch('/api/ai-chat', {
@@ -166,17 +183,30 @@ function AICoach() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error ?? `Error ${res.status}`);
+        throw new Error(data.error ?? 'AI Coach is temporarily overloaded. Try again in a few seconds.');
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+
+      // Store response inside prompt cache
+      try {
+        const cleanPrompt = promptText.toLowerCase().trim();
+        const rawCache = localStorage.getItem('wtp_coach_chat_cache');
+        const cacheMap = rawCache ? JSON.parse(rawCache) : {};
+        cacheMap[cleanPrompt] = {
+          response: data.text,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('wtp_coach_chat_cache', JSON.stringify(cacheMap));
+      } catch (e) {}
+
     } catch (err) {
       console.error('[AI_CHAT] Chat error:', err.message);
       setMessages(prev => [
         ...prev,
         {
           role:    'assistant',
-          content: `⚠️ Sorry, I encountered a connection issue: ${err.message}. Please try again shortly.`,
+          content: '⚠️ AI Coach is temporarily overloaded. Try again in a few seconds.',
         }
       ]);
     } finally {

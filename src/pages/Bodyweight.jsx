@@ -20,10 +20,15 @@ export default function Bodyweight() {
   const { user } = useAuth();
   const [logs,        setLogs]        = useState([]);
   const [weightInput, setWeightInput] = useState('');
-  const [weightDate,  setWeightDate]  = useState(todayLocalISO);  // ← new
+  const [weightDate,  setWeightDate]  = useState(todayLocalISO);
   const [loading,     setLoading]     = useState(true);
-  const [logError,    setLogError]    = useState(null);            // ← new
-  const dateInputRef = useRef(null);                               // ← new
+  const [logError,    setLogError]    = useState(null);
+  const [isMounted,   setIsMounted]   = useState(false);
+  const dateInputRef = useRef(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const fetchLogs = async () => {
     const { data, error } = await supabase
@@ -187,9 +192,9 @@ export default function Bodyweight() {
 
       {/* ── Chart ── */}
       <h2 className="subtitle" style={{ marginBottom: '16px', marginTop: '40px' }}>Projection Chart</h2>
-      <div className="glass card" style={{ padding: '32px 16px', height: '320px' }}>
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%" key={chartData.length}>
+      <div className="glass card" style={{ padding: '32px 16px', height: '320px', minHeight: '320px', position: 'relative' }}>
+        {isMounted && chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%" minHeight={250}>
             <LineChart data={chartData}>
               <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: '600', fill: 'var(--text-secondary)' }} dy={15} />
               <YAxis domain={['dataMin - 1', 'dataMax + 1']} axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: '600', fill: 'var(--text-secondary)' }} width={30} dx={-10} />

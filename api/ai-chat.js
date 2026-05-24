@@ -96,7 +96,7 @@ Strictly adhere to the domain boundaries. Be analytical, professional, and highl
 
     // ── Robust Timeout Handling ──────────────────────────────────────────────
     const apiCallPromise = client.chat.completions.create({
-      model: 'meta/llama-3.1-70b-instruct',
+      model: 'meta/llama-3.1-8b-instruct',
       temperature: 0.2,
       max_tokens: 1024,
       messages: chatMessages,
@@ -113,7 +113,8 @@ Strictly adhere to the domain boundaries. Be analytical, professional, and highl
     return res.status(200).json({ text: responseText });
   } catch (err) {
     console.error('[AI_CHAT] Exception occurred:', err.message);
-    const statusCode = err.message?.includes('timeout') ? 504 : 500;
-    return res.status(statusCode).json({ error: err.message ?? 'An error occurred during conversational processing' });
+    const isTimeout = err.message?.includes('timeout') || err.message?.includes('timeout limit');
+    const userMessage = 'AI Coach is temporarily overloaded. Try again in a few seconds.';
+    return res.status(isTimeout ? 504 : 500).json({ error: userMessage });
   }
 }

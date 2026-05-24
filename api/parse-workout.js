@@ -120,7 +120,7 @@ export default async function handler(req, res) {
     }
 
     const completion = await client.chat.completions.create({
-      model:       'meta/llama-3.1-70b-instruct',
+      model:       'meta/llama-3.1-8b-instruct',
       temperature: 0.1,
       max_tokens:  2048,
       messages: [
@@ -142,18 +142,17 @@ export default async function handler(req, res) {
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error('[AI_IMPORT] AI response was invalid JSON:', cleaned.slice(0, 500));
-      return res.status(422).json({ error: 'AI returned invalid JSON', raw: cleaned.slice(0, 500) });
+      console.error('[AI_IMPORT] AI response was invalid JSON.');
+      return res.status(422).json({ error: 'AI returned invalid JSON' });
     }
 
     if (!parsed.exercises || !Array.isArray(parsed.exercises)) {
-      return res.status(422).json({ error: 'AI response is missing the exercises array structure', parsed });
+      return res.status(422).json({ error: 'AI response is missing the exercises array structure' });
     }
 
-    console.log(`[AI_IMPORT] Workout parsed successfully. Exercises found: ${parsed.exercises.length}, Ambiguities found: ${parsed.ambiguous?.length ?? 0}`);
     return res.status(200).json(parsed);
   } catch (err) {
     console.error('[AI_IMPORT] Error during parsing:', err.message);
-    return res.status(500).json({ error: err.message ?? 'Internal server error during parsing' });
+    return res.status(500).json({ error: 'AI Parser is temporarily overloaded. Try again in a few seconds.' });
   }
 }

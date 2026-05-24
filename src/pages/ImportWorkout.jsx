@@ -39,6 +39,77 @@ function confidenceLabel(c) {
   return 'Low';
 }
 
+// ── Searchable Autocomplete selector dropdown ─────────────────────────────────
+function ExerciseSearchSelector({ value, onChange, allDbExercises }) {
+  const [search, setSearch] = useState(value);
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    setSearch(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtered = allDbExercises.filter(ex =>
+    ex.name.toLowerCase().includes(search.toLowerCase())
+  ).slice(0, 5);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', marginTop: '6px' }}>
+      <input
+        type="text"
+        value={search}
+        onChange={e => { setSearch(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search database exercise..."
+        style={{
+          width: '100%',
+          background: 'rgba(0,0,0,0.4)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: 'white',
+          borderRadius: '10px',
+          padding: '8px 14px',
+          fontSize: '14px',
+          fontWeight: '600',
+          outline: 'none',
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+          background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '12px', boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+          zIndex: 9999, overflow: 'hidden',
+        }}>
+          {filtered.map(ex => (
+            <div
+              key={ex.id}
+              onClick={() => { onChange(ex.name); setSearch(ex.name); setOpen(false); }}
+              style={{
+                padding: '10px 14px', cursor: 'pointer', fontSize: '13px',
+                color: 'rgba(255,255,255,0.85)', transition: 'background 0.12s',
+                borderBottom: '1px solid rgba(255,255,255,0.03)'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <strong>{ex.name}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '11px', marginLeft: '6px' }}>({ex.muscle_group})</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tiny inline dropdown for ambiguity resolution ─────────────────────────────
 function AmbiguityDropdown({ raw, options, value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -108,17 +179,23 @@ export default function ImportWorkout() {
   const [saveError,   setSaveError]   = useState(null);
   const [savedData,   setSavedData]   = useState(null);   // { vol, sets }
 
-  // Map resolved exercise names back into the parsed exercises list
-  const resolvedExercises = parsed?.exercises?.map(ex => {
-    const ambiguity = parsed?.ambiguous?.find(a => {
-      // Match if the exercise name is one of the ambiguous options
-      return a.options.includes(ex.name) || ex.name.toLowerCase().includes(a.raw.toLowerCase());
-    });
-    if (ambiguity && resolutions[ambiguity.raw]) {
-      return { ...ex, name: resolutions[ambiguity.raw], resolved: true };
-    }
-    return ex;
-  }) ?? [];
+  // Editable preview layers
+  const [reviewExercises, setReviewExercises] = useState([]);
+  const [reviewSplit, setReviewSplit] = useState('');
+  const [reviewDate, setReviewDate] = useState('');
+  const [showExplanation, setShowExplanation] = useState({});
+  const [allDbExercises, setAllDbExercises] = useState([]);
+
+  // Fetch all exercises on mount for searchable remapper autocomplete
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const { data } = await supabase.from('exercises').select('id, name, muscle_group').order('name');
+        if (data) setAllDbExercises(data);
+      } catch (e) {}
+    };
+    fetchAll();
+  }, []);
 
   // Check if all ambiguities are resolved
   const allResolved = (parsed?.ambiguous ?? []).every(a => resolutions[a.raw]);
@@ -137,7 +214,6 @@ export default function ImportWorkout() {
     } catch { /* non-critical */ }
 
     try {
-      console.log('[AI_IMPORT] Sending raw text for parsing.');
       const res = await fetch('/api/parse-workout', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,11 +227,19 @@ export default function ImportWorkout() {
       }
 
       setParsed(json);
-
-      // Require user interaction for disambiguating low-confidence/ambiguous exercises
       setResolutions({});
 
-      // Skip clarify step if no ambiguities
+      // Initialize review structures
+      const initialExercises = json.exercises?.map((ex, i) => ({
+        ...ex,
+        id: ex.id || `temp-${Date.now()}-${Math.random()}`
+      })) ?? [];
+
+      setReviewExercises(initialExercises);
+      setReviewSplit(json.split ?? 'Custom');
+      setReviewDate(json.date ?? new Date().toLocaleDateString('en-CA'));
+
+      // Require user interaction for disambiguating low-confidence/ambiguous exercises
       setStep(json.ambiguous?.length > 0 ? 'clarify' : 'preview');
     } catch (err) {
       setParseError(err.message ?? 'Failed to parse workout');
@@ -163,15 +247,41 @@ export default function ImportWorkout() {
     }
   };
 
+  // Apply clarify step choices into our review state
+  const handleConfirmClarify = () => {
+    setReviewExercises(prev => prev.map(ex => {
+      const ambiguity = parsed?.ambiguous?.find(a => {
+        return a.options.includes(ex.name) || ex.name.toLowerCase().includes(a.raw.toLowerCase());
+      });
+      if (ambiguity && resolutions[ambiguity.raw]) {
+        return { ...ex, name: resolutions[ambiguity.raw] };
+      }
+      return ex;
+    }));
+    setStep('preview');
+  };
+
   // ── Step 2: Confirm & Save ──────────────────────────────────────────────────
   const handleImport = async () => {
-    if (!parsed || resolvedExercises.length === 0) return;
+    if (reviewExercises.length === 0) return;
+    
+    // Low confidence block safeguard: check if any low-confidence item is unconfirmed
+    const hasUnconfirmedLowConfidence = reviewExercises.some(ex => {
+      const isLow = (ex.confidence ?? 0) < 0.7;
+      return isLow && !ex.name.trim(); // If low confidence and exercise name is empty
+    });
+
+    if (hasUnconfirmedLowConfidence) {
+      setSaveError('Please select and confirm a standardized database name for all low-confidence items.');
+      return;
+    }
+
     setStep('saving');
     setSaveError(null);
 
     // Resolve date
-    let sessionDate = parsed.date
-      ? new Date(parsed.date + 'T12:00:00').toISOString()
+    let sessionDate = reviewDate
+      ? new Date(reviewDate + 'T12:00:00').toISOString()
       : new Date(new Date().toLocaleDateString('en-CA') + 'T12:00:00').toISOString();
 
     // Insert workout session
@@ -181,7 +291,7 @@ export default function ImportWorkout() {
         user_id:    user.id,
         date:       sessionDate,
         split_type: 'AI Import',
-        split_day:  parsed.split ?? 'Unknown',
+        split_day:  reviewSplit || 'Unknown',
         notes:      `Imported via AI — original text length: ${rawText.length} chars`,
       })
       .select()
@@ -196,15 +306,15 @@ export default function ImportWorkout() {
     let totalVol  = 0;
     let totalSets = 0;
 
-    // For each resolved exercise, find or match in DB, then insert
-    for (let i = 0; i < resolvedExercises.length; i++) {
-      const ex = resolvedExercises[i];
+    for (let i = 0; i < reviewExercises.length; i++) {
+      const ex = reviewExercises[i];
+      if (!ex.name.trim()) continue;
 
       // Try to find exercise in DB by exact name (case-insensitive)
       const { data: dbEx } = await supabase
         .from('exercises')
         .select('id')
-        .ilike('name', ex.name)
+        .ilike('name', ex.name.trim())
         .limit(1)
         .single();
 
@@ -214,13 +324,13 @@ export default function ImportWorkout() {
       if (!exerciseId) {
         const { data: newEx } = await supabase
           .from('exercises')
-          .insert({ name: ex.name, muscle_group: 'Other' })
+          .insert({ name: ex.name.trim(), muscle_group: 'Other' })
           .select('id')
           .single();
         exerciseId = newEx?.id ?? null;
       }
 
-      if (!exerciseId) continue; // skip if we still can't get an ID
+      if (!exerciseId) continue;
 
       const { data: seData } = await supabase
         .from('session_exercises')
@@ -251,6 +361,57 @@ export default function ImportWorkout() {
     setStep('done');
   };
 
+  // ── Preview review screen callbacks ─────────────────────────────────────────
+  const updateExerciseName = (exIdx, newName) => {
+    setReviewExercises(prev => prev.map((ex, i) => i === exIdx ? { ...ex, name: newName } : ex));
+  };
+
+  const removeExercise = (exIdx) => {
+    setReviewExercises(prev => prev.filter((_, i) => i !== exIdx));
+  };
+
+  const updateSetField = (exIdx, setIdx, field, value) => {
+    setReviewExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx) return ex;
+      return {
+        ...ex,
+        sets: ex.sets.map((s, j) => j === setIdx ? { ...s, [field]: value === '' ? 0 : parseFloat(value) } : s)
+      };
+    }));
+  };
+
+  const removeSet = (exIdx, setIdx) => {
+    setReviewExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx) return ex;
+      return {
+        ...ex,
+        sets: ex.sets.filter((_, j) => j !== setIdx)
+      };
+    }));
+  };
+
+  const addSet = (exIdx) => {
+    setReviewExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx) return ex;
+      const lastSet = ex.sets[ex.sets.length - 1];
+      return {
+        ...ex,
+        sets: [...ex.sets, { weight_kg: lastSet?.weight_kg ?? 0, reps: lastSet?.reps ?? 10 }]
+      };
+    }));
+  };
+
+  const addExercise = () => {
+    setReviewExercises(prev => [
+      ...prev,
+      {
+        name: '',
+        confidence: 1.0,
+        sets: [{ weight_kg: 0, reps: 10 }]
+      }
+    ]);
+  };
+
   const handleReset = () => {
     setStep('paste');
     setRawText('');
@@ -259,6 +420,10 @@ export default function ImportWorkout() {
     setParseError(null);
     setSaveError(null);
     setSavedData(null);
+    setReviewExercises([]);
+    setReviewSplit('');
+    setReviewDate('');
+    setShowExplanation({});
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -414,7 +579,7 @@ export default function ImportWorkout() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '24px' }}>
             <Loader2 className="animate-spin" size={20} color="var(--text-secondary)" />
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600' }}>This takes 5–15 seconds</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600' }}>This takes 2–5 seconds</span>
           </div>
         </div>
       )}
@@ -454,14 +619,14 @@ export default function ImportWorkout() {
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
               className="btn-secondary"
-              onClick={() => setStep('preview')}
+              onClick={handleConfirmClarify}
               style={{ flex: 1, padding: '16px', borderRadius: '16px', fontSize: '15px' }}
             >
               Skip → Preview
             </button>
             <button
               className="btn-primary"
-              onClick={() => setStep('preview')}
+              onClick={handleConfirmClarify}
               disabled={!allResolved}
               style={{ flex: 2, padding: '16px', borderRadius: '16px', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: allResolved ? 1 : 0.6 }}
             >
@@ -476,9 +641,9 @@ export default function ImportWorkout() {
         <div className="animate-fade-in">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
             <div>
-              <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Preview Import</h2>
+              <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Review & Edit Import</h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500', margin: 0 }}>
-                Review before saving to your account.
+                Correct database mappings, adjust set logs, or add exercises before concluding.
               </p>
             </div>
             <button
@@ -494,62 +659,170 @@ export default function ImportWorkout() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Calendar size={16} color="var(--accent-hover)" />
               <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Date</div>
-                <div style={{ fontWeight: '800', fontSize: '15px' }}>{parsed.date ?? 'Today'}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Session Date</div>
+                <input
+                  type="date"
+                  value={reviewDate}
+                  max={new Date().toLocaleDateString('en-CA')}
+                  onChange={e => setReviewDate(e.target.value)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'white',
+                    fontWeight: '800', fontSize: '14px', outline: 'none', cursor: 'pointer'
+                  }}
+                />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Dumbbell size={16} color="#30D158" />
               <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Split</div>
-                <div style={{ fontWeight: '800', fontSize: '15px' }}>{parsed.split ?? 'Unknown'}</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Zap size={16} color="#FF9F0A" />
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Exercises</div>
-                <div style={{ fontWeight: '800', fontSize: '15px' }}>{resolvedExercises.length}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Routine Split</div>
+                <input
+                  type="text"
+                  value={reviewSplit}
+                  onChange={e => setReviewSplit(e.target.value)}
+                  placeholder="e.g. Push"
+                  style={{
+                    background: 'transparent', border: 'none', color: 'white',
+                    fontWeight: '800', fontSize: '14px', outline: 'none', width: '100px'
+                  }}
+                />
               </div>
             </div>
           </div>
 
           {/* Exercise preview cards */}
-          {resolvedExercises.map((ex, idx) => (
-            <div key={idx} className="glass ex-preview-card" style={{ margin: '0 0 14px' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '800', fontSize: '17px', color: 'white' }}>{ex.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                    <div style={{ width: '120px' }}>
-                      <div className="confidence-bar">
-                        <div
-                          className="confidence-fill"
-                          style={{ width: `${(ex.confidence ?? 0) * 100}%`, background: confidenceColor(ex.confidence ?? 0) }}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+            {reviewExercises.map((ex, idx) => {
+              const isLowConfidence = (ex.confidence ?? 0) < 0.7;
+              const showEx = showExplanation[idx] || isLowConfidence;
+              const hasSets = ex.sets && ex.sets.length > 0;
+
+              return (
+                <div key={idx} className="glass card animate-fade-in" style={{ padding: '0', overflow: 'hidden', margin: 0, border: isLowConfidence ? '1px dashed rgba(255,69,58,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                  {/* Card Header */}
+                  <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1, marginRight: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '800', color: 'rgba(255,255,255,0.4)' }}>#{idx + 1}</span>
+                        <input
+                          type="text"
+                          value={ex.name}
+                          onChange={e => updateExerciseName(idx, e.target.value)}
+                          placeholder="Movement Name"
+                          style={{
+                            background: 'transparent', border: 'none', color: '#fff',
+                            fontSize: '17px', fontWeight: '800', outline: 'none',
+                            width: '100%', padding: '2px 0'
+                          }}
                         />
                       </div>
+                      <div
+                        onClick={() => setShowExplanation(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', userSelect: 'none' }}
+                      >
+                        <div style={{ width: '80px', height: '3px', borderRadius: '100px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                          <div
+                            style={{ height: '100%', borderRadius: '100px', width: `${(ex.confidence ?? 0) * 100}%`, background: confidenceColor(ex.confidence ?? 0) }}
+                          />
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: confidenceColor(ex.confidence ?? 0), textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {confidenceLabel(ex.confidence ?? 0)} Match ▾
+                        </span>
+                      </div>
                     </div>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: confidenceColor(ex.confidence ?? 0), textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {confidenceLabel(ex.confidence ?? 0)} confidence
-                    </span>
+                    <button
+                      onClick={() => removeExercise(idx)}
+                      style={{ background: 'none', border: 'none', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', borderRadius: '8px', transition: 'background 0.2s' }}
+                      onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,69,58,0.1)'; e.currentTarget.style.color = 'var(--error-color)'; }}
+                      onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Searchable Remapping Explanations Drawer */}
+                  {showEx && (
+                    <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.01)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <Zap size={13} color={isLowConfidence ? '#FF9F0A' : 'var(--accent-hover)'} />
+                        <span style={{ fontSize: '12px', fontWeight: '800', color: isLowConfidence ? '#FF9F0A' : 'rgba(255,255,255,0.9)' }}>
+                          {isLowConfidence ? 'Action Required: Confirm Movement' : 'Inference Match Details'}
+                        </span>
+                      </div>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '12px', lineHeight: '1.5', margin: '0 0 10px', fontWeight: '600' }}>
+                        {isLowConfidence
+                          ? `Parsed term "${ex.name || 'empty'}" needs verification. Select a standardized movement name:`
+                          : `Standardized match from log text. Use the search input below if you wish to override the mapping:`}
+                      </p>
+                      <ExerciseSearchSelector
+                        value={ex.name}
+                        onChange={val => updateExerciseName(idx, val)}
+                        allDbExercises={allDbExercises}
+                      />
+                    </div>
+                  )}
+
+                  {/* Card Body — Set entries */}
+                  <div style={{ padding: '16px 20px' }}>
+                    {hasSets ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {ex.sets.map((s, si) => (
+                          <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-secondary)', width: '28px' }}>S{si + 1}</span>
+                            
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '4px 12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={s.weight_kg === 0 ? '' : s.weight_kg}
+                                onChange={e => updateSetField(idx, si, 'weight_kg', e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '15px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
+                                inputMode="decimal"
+                              />
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', marginLeft: '4px', marginRight: '12px' }}>kg</span>
+                              <span style={{ color: 'var(--accent-hover)', fontWeight: '800', fontSize: '14px' }}>×</span>
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={s.reps === 0 ? '' : s.reps}
+                                onChange={e => updateSetField(idx, si, 'reps', e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '15px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
+                                inputMode="numeric"
+                              />
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', marginLeft: '4px' }}>reps</span>
+                            </div>
+
+                            <button
+                              onClick={() => removeSet(idx, si)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '4px' }}
+                            >
+                              <X size={15} color="var(--error-color)" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '8px' }}>No sets added to this movement.</div>
+                    )}
+                    <button
+                      onClick={() => addSet(idx)}
+                      style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', color: 'var(--text-secondary)', fontWeight: '700', cursor: 'pointer', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      + Add Set
+                    </button>
                   </div>
                 </div>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', color: 'var(--text-secondary)' }}>
-                  {ex.sets?.length ?? 0} sets
-                </div>
-              </div>
-              <div style={{ padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {ex.sets?.map((s, si) => (
-                  <div key={si} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', fontWeight: '700', color: 'white' }}>
-                    {s.weight_kg > 0 ? `${s.weight_kg}kg` : 'BW'} × {s.reps}
-                  </div>
-                ))}
-                {(!ex.sets || ex.sets.length === 0) && (
-                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No sets detected</span>
-                )}
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
+
+          <button
+            onClick={addExercise}
+            className="btn-secondary"
+            style={{ width: '100%', border: '1px solid rgba(0,122,255,0.3)', background: 'rgba(0,122,255,0.05)', padding: '14px', fontSize: '14px', display: 'flex', justifyContent: 'center', color: 'white', fontWeight: '800', borderRadius: '16px', marginBottom: '24px', gap: '8px' }}
+          >
+            <Dumbbell size={16} color="var(--accent-hover)" /> + Add Missing Exercise
+          </button>
 
           {saveError && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 18px', background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: '14px', marginBottom: '16px' }}>
@@ -561,11 +834,11 @@ export default function ImportWorkout() {
           <button
             className="btn-primary"
             onClick={handleImport}
-            disabled={resolvedExercises.length === 0}
+            disabled={reviewExercises.length === 0}
             style={{ width: '100%', padding: '18px', fontSize: '16px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '8px' }}
           >
             <Upload size={20} />
-            Import {resolvedExercises.length} Exercise{resolvedExercises.length !== 1 ? 's' : ''}
+            Import {reviewExercises.length} Exercise{reviewExercises.length !== 1 ? 's' : ''}
           </button>
         </div>
       )}
