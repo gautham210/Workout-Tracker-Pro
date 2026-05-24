@@ -27,6 +27,53 @@ Latpulldown steelwide
 // ── Step definitions ──────────────────────────────────────────────────────────
 const STEPS = ['paste', 'parsing', 'clarify', 'preview', 'saving', 'done'];
 
+// ── Global Standard Seed Exercises (Synonyms, aliases, type categories) ───────
+const STANDARD_SEED_EXERCISES = [
+  { name: 'Reverse Fly', muscle_group: 'Shoulders', type: 'Rear Delt Fly, Back, Shoulders' },
+  { name: 'Dumbbell Reverse Fly', muscle_group: 'Shoulders', type: 'Rear Delt Fly, Back, Shoulders' },
+  { name: 'Pec Deck Rear Delt Fly', muscle_group: 'Shoulders', type: 'Rear Delt Fly, Back, Shoulders' },
+  { name: 'Lat Pulldown', muscle_group: 'Back', type: 'Lats, Pull, Back' },
+  { name: 'Wide Grip Lat Pulldown', muscle_group: 'Back', type: 'Lats, Pull, Back' },
+  { name: 'Close Grip Lat Pulldown', muscle_group: 'Back', type: 'Lats, Pull, Back' },
+  { name: 'Flat Dumbbell Press', muscle_group: 'Chest', type: 'Chest, Push, Flat db' },
+  { name: 'Incline Dumbbell Press', muscle_group: 'Chest', type: 'Chest, Push, Incline db' },
+  { name: 'Flat Barbell Bench Press', muscle_group: 'Chest', type: 'Chest, Push, Bench Press' },
+  { name: 'Incline Barbell Bench Press', muscle_group: 'Chest', type: 'Chest, Push, Incline Bench' },
+  { name: 'Leg Curl', muscle_group: 'Legs', type: 'Hamstrings, Legs, Curls' },
+  { name: 'Bicep Curl', muscle_group: 'Arms', type: 'Biceps, Arms, Curls' },
+  { name: 'Barbell Curl', muscle_group: 'Arms', type: 'Biceps, Arms' },
+  { name: 'Dumbbell Bicep Curl', muscle_group: 'Arms', type: 'Biceps, Arms' },
+  { name: 'Hammer Curl', muscle_group: 'Arms', type: 'Biceps, Arms' },
+  { name: 'Overhead Tricep Extension', muscle_group: 'Arms', type: 'Triceps, Arms, Overhead Extension' },
+  { name: 'Dumbbell Overhead Tricep Extension', muscle_group: 'Arms', type: 'Triceps, Arms' },
+  { name: 'Chest Fly', muscle_group: 'Chest', type: 'Chest, Push, Flys' },
+  { name: 'Dumbbell Chest Fly', muscle_group: 'Chest', type: 'Chest, Push, Flys' },
+  { name: 'Pec Deck Chest Fly', muscle_group: 'Chest', type: 'Chest, Push, Flys' },
+  { name: 'Lateral Raise', muscle_group: 'Shoulders', type: 'Side Delts, Shoulders' },
+  { name: 'Dumbbell Lateral Raise', muscle_group: 'Shoulders', type: 'Side Delts, Shoulders' },
+  { name: 'Cable Lateral Raise', muscle_group: 'Shoulders', type: 'Side Delts, Shoulders' },
+  { name: 'Barbell Squat', muscle_group: 'Legs', type: 'Quads, Legs' },
+  { name: 'Leg Press', muscle_group: 'Legs', type: 'Quads, Legs' },
+  { name: 'Barbell Deadlift', muscle_group: 'Back', type: 'Hamstrings, Back, Lower Back' },
+  { name: 'Romanian Deadlift', muscle_group: 'Legs', type: 'Hamstrings, Legs, RDL' },
+  { name: 'Dumbbell Row', muscle_group: 'Back', type: 'Lats, Back, Rows' },
+  { name: 'Barbell Row', muscle_group: 'Back', type: 'Lats, Back, Rows' },
+  { name: 'Seated Cable Row', muscle_group: 'Back', type: 'Lats, Back, Rows' },
+  { name: 'Seated Calf Raise', muscle_group: 'Legs', type: 'Calves, Legs' },
+  { name: 'Standing Calf Raise', muscle_group: 'Legs', type: 'Calves, Legs' },
+  { name: 'Seated Calf - 30kg x3', muscle_group: 'Legs', type: 'Calves, Legs' },
+  { name: 'Overhead Shoulder Press', muscle_group: 'Shoulders', type: 'Front Delts, Shoulders' },
+  { name: 'Dumbbell Shoulder Press', muscle_group: 'Shoulders', type: 'Front Delts, Shoulders' },
+  { name: 'Arnold Press', muscle_group: 'Shoulders', type: 'Shoulders, Press' },
+  { name: 'Tricep Rope Pushdown', muscle_group: 'Arms', type: 'Triceps, Arms' },
+  { name: 'Tricep Pushdown', muscle_group: 'Arms', type: 'Triceps, Arms' },
+  { name: 'Dips', muscle_group: 'Arms', type: 'Triceps, Chest, Bodyweight' },
+  { name: 'Pullups', muscle_group: 'Back', type: 'Lats, Back, Bodyweight' },
+  { name: 'Pushups', muscle_group: 'Chest', type: 'Chest, Push, Bodyweight' },
+  { name: 'Cable Crossover', muscle_group: 'Chest', type: 'Chest, Flys' },
+  { name: 'Face Pulls', muscle_group: 'Shoulders', type: 'Rear Delts, Shoulders, Back' }
+];
+
 // ── Confidence badge color ────────────────────────────────────────────────────
 function confidenceColor(c) {
   if (c >= 0.9) return '#30D158';
@@ -40,6 +87,27 @@ function confidenceLabel(c) {
   return 'Low';
 }
 
+// ── Human-friendly Parsed Date Formatter ──────────────────────────────────────
+function formatParsedDate(dateStr, splitVal, index) {
+  if (!dateStr) {
+    return `${splitVal || 'Workout'} Day ${index + 1}`;
+  }
+
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+  } catch (e) {}
+
+  return `${splitVal ? `${splitVal} — ` : ''}${dateStr}`;
+}
+
 // ── Boundary Detection Splitter Chunker ───────────────────────────────────────
 function chunkRawWorkoutText(rawText) {
   const lines = rawText.split('\n');
@@ -48,7 +116,6 @@ function chunkRawWorkoutText(rawText) {
   let currentSplit = 'Custom';
   let currentDate = null;
 
-  // Regexes to detect headers/dates/splits
   const splitRegex = /\b(push|pull|legs|upper|lower|full\s*body|chest|back|shoulders|arms|biceps|triceps|cardio)\b/i;
   const dateRegex = /\b(\d{1,2}[-\/.]\d{1,2}[-\/.]?\d{0,4})|((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:\s+\d{4})?)|(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
   const dayMarkerRegex = /\b(day\s+\d+|workout\s+\d+|session\s+\d+)\b/i;
@@ -66,7 +133,6 @@ function chunkRawWorkoutText(rawText) {
     const isDate = dateRegex.test(line);
     const isDayMarker = dayMarkerRegex.test(line);
 
-    // If it's a boundary header line and we already have some lines in currentChunk
     if ((isDate || isSplit || isDayMarker) && currentChunk.filter(l => l.trim()).length > 0) {
       chunks.push({
         rawChunk: currentChunk.join('\n').trim(),
@@ -79,7 +145,6 @@ function chunkRawWorkoutText(rawText) {
     if (isDate || isSplit || isDayMarker) {
       const dateMatch = line.match(dateRegex);
       if (dateMatch) {
-        // Parse date label
         currentDate = dateMatch[0];
       }
       
@@ -92,7 +157,6 @@ function chunkRawWorkoutText(rawText) {
     currentChunk.push(lines[i]);
   }
 
-  // Push final chunk
   if (currentChunk.filter(l => l.trim()).length > 0) {
     chunks.push({
       rawChunk: currentChunk.join('\n').trim(),
@@ -112,7 +176,7 @@ function chunkRawWorkoutText(rawText) {
   return chunks;
 }
 
-// ── Searchable Autocomplete selector dropdown ─────────────────────────────────
+// ── Searchable Autocomplete selector Dropdown (Combobox) ─────────────────────
 function ExerciseSearchSelector({ value, onChange, allDbExercises }) {
   const [search, setSearch] = useState(value);
   const [open, setOpen] = useState(false);
@@ -131,9 +195,42 @@ function ExerciseSearchSelector({ value, onChange, allDbExercises }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const filtered = allDbExercises.filter(ex =>
-    ex.name.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 5);
+  // Premium fuzzy search including synonyms, aliases, keywords, typo bounds
+  const getFilteredExercises = () => {
+    if (!search.trim()) return allDbExercises.slice(0, 8);
+    const query = search.toLowerCase().trim();
+    
+    const scored = allDbExercises.map(ex => {
+      const name = ex.name.toLowerCase();
+      const group = (ex.muscle_group || '').toLowerCase();
+      const type = (ex.type || '').toLowerCase();
+      
+      let score = 0;
+      
+      if (name === query) score += 100;
+      else if (name.startsWith(query)) score += 80;
+      else if (name.includes(query)) score += 50;
+      
+      if (group.includes(query)) score += 25;
+      if (type.includes(query)) score += 40;
+      
+      // Synonym/abbreviation logic: lat, db, reverse, curls, etc.
+      if (query === 'db' && name.includes('dumbbell')) score += 45;
+      if (query === 'lat' && name.includes('lat pulldown')) score += 45;
+      if (query === 'fly' && name.includes('fly')) score += 45;
+      if (query === 'reverse' && name.includes('reverse fly')) score += 70;
+      
+      return { ex, score };
+    });
+    
+    return scored
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.ex)
+      .slice(0, 10);
+  };
+
+  const filtered = getFilteredExercises();
 
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%', marginTop: '6px' }}>
@@ -142,96 +239,69 @@ function ExerciseSearchSelector({ value, onChange, allDbExercises }) {
         value={search}
         onChange={e => { setSearch(e.target.value); onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder="Search database exercise..."
+        placeholder="Type to search entire exercise database..."
         style={{
           width: '100%',
           background: 'rgba(0,0,0,0.4)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(255,255,255,0.15)',
           color: 'white',
           borderRadius: '10px',
-          padding: '8px 14px',
+          padding: '10px 14px',
           fontSize: '14px',
           fontWeight: '600',
           outline: 'none',
+          transition: 'border-color 0.2s',
+          boxSizing: 'border-box'
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
         }}
       />
       {open && filtered.length > 0 && (
         <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-          background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '12px', boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
-          zIndex: 9999, overflow: 'hidden',
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '6px',
+          background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+          zIndex: 10000, maxHeight: '240px', overflowY: 'auto',
+          overflowX: 'hidden'
         }}>
           {filtered.map(ex => (
             <div
               key={ex.id}
               onClick={() => { onChange(ex.name); setSearch(ex.name); setOpen(false); }}
               style={{
-                padding: '10px 14px', cursor: 'pointer', fontSize: '13px',
-                color: 'rgba(255,255,255,0.85)', transition: 'background 0.12s',
-                borderBottom: '1px solid rgba(255,255,255,0.03)'
+                padding: '12px 16px', cursor: 'pointer', fontSize: '13px',
+                color: 'rgba(255,255,255,0.9)', transition: 'all 0.15s',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <strong>{ex.name}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '11px', marginLeft: '6px' }}>({ex.muscle_group})</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Tiny dropdown for ambiguity resolution ────────────────────────────────────
-function AmbiguityDropdown({ raw, options, value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          background: 'rgba(0,122,255,0.1)', border: '1px solid rgba(0,122,255,0.3)',
-          borderRadius: '10px', padding: '8px 14px',
-          color: 'var(--accent-hover)', fontWeight: '700', fontSize: '14px',
-          cursor: 'pointer', width: '100%', justifyContent: 'space-between',
-        }}
-      >
-        <span>{value || 'Select exercise…'}</span>
-        <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-          background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '12px', boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
-          zIndex: 9999, overflow: 'hidden',
-        }}>
-          {options.map(opt => (
-            <div
-              key={opt}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              style={{
-                padding: '11px 16px', cursor: 'pointer', fontWeight: '600',
-                fontSize: '14px', color: opt === value ? 'var(--accent-hover)' : 'rgba(255,255,255,0.85)',
-                background: opt === value ? 'rgba(0,122,255,0.1)' : 'transparent',
-                borderLeft: opt === value ? '3px solid var(--accent-color)' : '3px solid transparent',
-                transition: 'background 0.12s',
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'var(--accent-color)';
+                e.currentTarget.style.color = '#fff';
               }}
-              onMouseEnter={e => { if (opt !== value) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-              onMouseLeave={e => { if (opt !== value) e.currentTarget.style.background = 'transparent'; }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.9)';
+              }}
             >
-              {opt}
+              <div>
+                <strong>{ex.name}</strong>
+                {ex.type && (
+                  <span style={{ fontSize: '10px', opacity: 0.6, display: 'block', marginTop: '2px' }}>
+                    Keywords: {ex.type}
+                  </span>
+                )}
+              </div>
+              <span style={{ 
+                background: 'rgba(255,255,255,0.1)', 
+                color: 'white', 
+                fontSize: '10px', 
+                fontWeight: '700', 
+                padding: '2px 8px', 
+                borderRadius: '6px' 
+              }}>
+                {ex.muscle_group}
+              </span>
             </div>
           ))}
         </div>
@@ -246,8 +316,8 @@ export default function ImportWorkout() {
 
   const [step,            setStep]            = useState('paste');
   const [rawText,         setRawText]         = useState('');
-  const [reviewSessions,  setReviewSessions]  = useState([]);   // Sessions parsed list
-  const [resolutions,     setResolutions]     = useState({});   // ambiguous chosen names map
+  const [reviewSessions,  setReviewSessions]  = useState([]);
+  const [resolutions,     setResolutions]     = useState({});
   const [parseError,      setParseError]      = useState(null);
   const [saveError,       setSaveError]       = useState(null);
   const [savedData,       setSavedData]       = useState(null);
@@ -255,15 +325,47 @@ export default function ImportWorkout() {
   const [showExplanation, setShowExplanation] = useState({});
   const [allDbExercises,  setAllDbExercises]  = useState([]);
 
-  // Batch process stage trackers
+  // Chunker states
   const [parsingProgress, setParsingProgress] = useState({ current: 0, total: 0, currentLabel: '' });
 
+  // Index standard seeds + database exercises cleanly on mount
   useEffect(() => {
     const fetchAll = async () => {
       try {
         const { data } = await supabase.from('exercises').select('id, name, muscle_group').order('name');
-        if (data) setAllDbExercises(data);
-      } catch (e) {}
+        
+        const mergedMap = new Map();
+        
+        // Seed Standard lists first to guarantee coverage
+        STANDARD_SEED_EXERCISES.forEach(item => {
+          mergedMap.set(item.name.toLowerCase(), {
+            id: `seed-${item.name.replace(/\s+/g, '-').toLowerCase()}`,
+            name: item.name,
+            muscle_group: item.muscle_group,
+            type: item.type
+          });
+        });
+        
+        if (data) {
+          data.forEach(item => {
+            mergedMap.set(item.name.toLowerCase(), {
+              id: item.id,
+              name: item.name,
+              muscle_group: item.muscle_group || 'Other',
+              type: ''
+            });
+          });
+        }
+        
+        setAllDbExercises(Array.from(mergedMap.values()));
+      } catch (e) {
+        setAllDbExercises(STANDARD_SEED_EXERCISES.map((item, idx) => ({
+          id: `seed-${idx}`,
+          name: item.name,
+          muscle_group: item.muscle_group,
+          type: item.type
+        })));
+      }
     };
     fetchAll();
   }, []);
@@ -285,7 +387,7 @@ export default function ImportWorkout() {
     try {
       const { data } = await supabase.from('exercises').select('name').limit(500);
       exerciseNames = data?.map(e => e.name) ?? [];
-    } catch { /* non-critical fallback */ }
+    } catch { /* fallback */ }
 
     const parsedSessionsTemp = [];
 
@@ -340,8 +442,13 @@ export default function ImportWorkout() {
         const ambiguity = session.ambiguous?.find(a => 
           a.options.includes(ex.name) || ex.name.toLowerCase().includes(a.raw.toLowerCase())
         );
-        if (ambiguity && resolutions[`${sIdx}-${ambiguity.raw}`]) {
-          return { ...ex, name: resolutions[`${sIdx}-${ambiguity.raw}`], confidence: 1.0 };
+        if (ambiguity) {
+          const resVal = resolutions[`${sIdx}-${ambiguity.raw}`];
+          if (resVal === '__SKIP__') {
+            return { ...ex, confidence: 1.0 }; // skip mapping, accept raw
+          } else if (resVal) {
+            return { ...ex, name: resVal, confidence: 1.0 };
+          }
         }
         return ex;
       });
@@ -354,15 +461,13 @@ export default function ImportWorkout() {
   const handleImport = async () => {
     if (reviewSessions.length === 0) return;
 
-    const hasUnconfirmedLowConfidence = reviewSessions.some(session => 
-      session.exercises.some(ex => {
-        const isLow = (ex.confidence ?? 0) < 0.7;
-        return isLow && !ex.name.trim();
-      })
+    // Safety checks: cancel if naming empty
+    const hasEmptyNames = reviewSessions.some(session => 
+      session.exercises.some(ex => !ex.name.trim())
     );
 
-    if (hasUnconfirmedLowConfidence) {
-      setSaveError('Please select and confirm a standardized name for all highlighted exercises.');
+    if (hasEmptyNames) {
+      setSaveError('Please enter a valid exercise name for all preview items.');
       return;
     }
 
@@ -381,7 +486,7 @@ export default function ImportWorkout() {
           ? new Date(session.date + 'T12:00:00').toISOString()
           : new Date(new Date().toLocaleDateString('en-CA') + 'T12:00:00').toISOString();
 
-        // Create a separate workout session in the database
+        // Create separate workout sessions
         const { data: sessionData, error: sessionError } = await supabase
           .from('workout_sessions')
           .insert({
@@ -402,7 +507,6 @@ export default function ImportWorkout() {
           const ex = session.exercises[i];
           if (!ex.name.trim()) continue;
 
-          // Find existing standardized exercise name
           const { data: dbEx } = await supabase
             .from('exercises')
             .select('id')
@@ -413,7 +517,6 @@ export default function ImportWorkout() {
           let exerciseId = dbEx?.id ?? null;
 
           if (!exerciseId) {
-            // Register missing standard exercise dynamically
             const { data: newEx } = await supabase
               .from('exercises')
               .insert({ name: ex.name.trim(), muscle_group: 'Other' })
@@ -558,6 +661,38 @@ export default function ImportWorkout() {
     setShowExplanation({});
   };
 
+  // ── Import Safety Warning Validator ──
+  const getValidationWarnings = () => {
+    const warnings = [];
+    reviewSessions.forEach((session, sIdx) => {
+      const dayLabel = `Workout Day ${sIdx + 1}`;
+      if (!session.date) {
+        warnings.push(`${dayLabel}: Missing date selection. Defaults to today's date.`);
+      }
+      if (session.exercises.length === 0) {
+        warnings.push(`${dayLabel}: Has no exercises defined.`);
+      }
+      session.exercises.forEach((ex, exIdx) => {
+        const nameLabel = ex.name.trim() || `Unnamed #${exIdx + 1}`;
+        if (!ex.name.trim()) {
+          warnings.push(`${dayLabel}, Exercise #${exIdx + 1}: Exercise name field is empty.`);
+        }
+        if (!ex.sets || ex.sets.length === 0) {
+          warnings.push(`${dayLabel}, "${nameLabel}": Contains zero set logs.`);
+        } else {
+          ex.sets.forEach((s, sNo) => {
+            if (s.reps <= 0) {
+              warnings.push(`${dayLabel}, "${nameLabel}" Set ${sNo + 1}: Reps must be greater than 0.`);
+            }
+          });
+        }
+      });
+    });
+    return warnings;
+  };
+
+  const validationWarnings = getValidationWarnings();
+
   return (
     <div className="page-enter" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '120px' }}>
       <style>{`
@@ -568,13 +703,6 @@ export default function ImportWorkout() {
           50%       { box-shadow: 0 0 40px rgba(0,122,255,0.5); }
         }
         .parsing-pulse { animation: pulseGlow 1.5s ease-in-out infinite; }
-        .step-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; }
-        .step-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: rgba(255,255,255,0.15); transition: all 0.3s;
-        }
-        .step-dot.active { background: var(--accent-color); box-shadow: 0 0 12px rgba(0,122,255,0.6); width: 24px; border-radius: 4px; }
-        .step-dot.done   { background: #30D158; }
         .import-textarea {
           width: 100%; min-height: 240px; background: rgba(0,0,0,0.3);
           border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
@@ -584,6 +712,41 @@ export default function ImportWorkout() {
         }
         .import-textarea:focus { border-color: rgba(0,122,255,0.5); background: rgba(0,0,0,0.4); }
         .import-textarea::placeholder { color: rgba(255,255,255,0.2); font-family: inherit; }
+        
+        .ex-preview-card {
+          border-radius: 16px;
+          overflow: visible;
+          margin-bottom: 14px;
+          transition: all 0.2s ease-in-out;
+        }
+        .ex-preview-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        .sticky-action-bar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: rgba(15, 23, 42, 0.9);
+          backdrop-filter: blur(20px);
+          border-top: 1px solid rgba(255,255,255,0.1);
+          padding: 16px 24px;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .sticky-inner {
+          width: 100%;
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        
+        @media (min-width: 600px) {
+          .progress-label { display: block !important; }
+          .progress-divider { width: 40px !important; }
+        }
       `}</style>
 
       {/* ── Title Header ── */}
@@ -599,21 +762,50 @@ export default function ImportWorkout() {
         </p>
       </div>
 
-      {/* ── Step Indicator ── */}
-      <div className="step-indicator">
-        {STEPS.map((s) => {
-          const stepIdx = STEPS.indexOf(step);
-          const thisIdx = STEPS.indexOf(s);
+      {/* ── Top Progress Flow Indicator ── */}
+      <div className="glass" style={{ display: 'flex', borderRadius: '16px', padding: '16px 20px', marginBottom: '32px', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
+        {[
+          { label: '1. Parse Log', activeStep: 'paste', doneSteps: ['parsing', 'clarify', 'preview', 'saving', 'done'] },
+          { label: '2. Clarify Ambiguity', activeStep: 'clarify', doneSteps: ['preview', 'saving', 'done'] },
+          { label: '3. Review Session', activeStep: 'preview', doneSteps: ['saving', 'done'] },
+          { label: '4. Done', activeStep: 'done', doneSteps: [] }
+        ].map((stage, idx) => {
+          const isActive = step === stage.activeStep || (step === 'parsing' && stage.activeStep === 'paste') || (step === 'saving' && stage.activeStep === 'preview');
+          const isDone = stage.doneSteps.includes(step);
+          
           return (
-            <div
-              key={s}
-              className={`step-dot ${thisIdx === stepIdx ? 'active' : thisIdx < stepIdx ? 'done' : ''}`}
-            />
+            <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: isActive ? 'var(--accent-color)' : isDone ? '#30D158' : 'rgba(255,255,255,0.08)',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  border: isActive ? '2px solid var(--accent-hover)' : 'none',
+                  boxShadow: isActive ? '0 0 12px rgba(0,122,255,0.5)' : 'none',
+                  transition: 'all 0.3s'
+                }}>
+                  {isDone ? '✓' : idx + 1}
+                </div>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: isActive || isDone ? '700' : '500',
+                  color: isActive ? 'white' : isDone ? '#30D158' : 'rgba(255,255,255,0.4)',
+                  display: 'none'
+                }} className="progress-label">
+                  {stage.label.split('. ')[1]}
+                </span>
+              </div>
+              {idx < 3 && <div className="progress-divider" style={{ width: '20px', height: '1px', background: 'rgba(255,255,255,0.1)', marginLeft: '12px', marginRight: '4px' }} />}
+            </div>
           );
         })}
-        <span style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase' }}>
-          {{ paste: 'Paste', parsing: 'Parsing…', clarify: 'Clarify', preview: 'Preview', saving: 'Saving…', done: 'Done' }[step]}
-        </span>
       </div>
 
       {/* ═══════════════════════════════════════════════════════ STEP: PASTE */}
@@ -705,39 +897,109 @@ export default function ImportWorkout() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════ STEP: CLARIFY */}
+      {/* ─── Clarify Step ─── */}
       {step === 'clarify' && reviewSessions.length > 0 && (
         <div className="animate-fade-in">
           <div style={{ marginBottom: '24px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Clarify Ambiguous Exercises</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>
-              Standardize mapped database categories before previewing:
+              Select standardized exercises for any ambiguous terms identified:
             </p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
             {reviewSessions.map((session, sIdx) => 
-              (session.ambiguous ?? []).map((amb, aIdx) => (
-                <div key={`${sIdx}-${aIdx}`} className="glass card" style={{ padding: '20px', margin: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                    <div style={{ background: 'rgba(255,159,10,0.12)', padding: '7px', borderRadius: '10px' }}>
-                      <AlertTriangle size={16} color="#FF9F0A" />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '800', fontSize: '16px', color: 'white' }}>"{amb.raw}"</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginTop: '2px' }}>
-                        Day {sIdx + 1} ({session.split}) — Could not be mapped with high confidence
+              (session.ambiguous ?? []).map((amb, aIdx) => {
+                const resolutionKey = `${sIdx}-${amb.raw}`;
+                const resolvedVal = resolutions[resolutionKey] || '';
+                const isSkipped = resolutions[resolutionKey] === '__SKIP__';
+                
+                return (
+                  <div key={`${sIdx}-${aIdx}`} className="glass card animate-fade-in" style={{ padding: '24px', margin: 0, borderLeft: '4px solid #FF9F0A' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ background: 'rgba(255,159,10,0.12)', padding: '8px', borderRadius: '10px' }}>
+                          <AlertTriangle size={18} color="#FF9F0A" />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '800', fontSize: '17px', color: 'white' }}>"{amb.raw}"</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginTop: '2px' }}>
+                            {formatParsedDate(session.date, session.split, sIdx)} — Low Confidence Match
+                          </div>
+                        </div>
                       </div>
+                      <span style={{ fontSize: '11px', color: '#FF9F0A', background: 'rgba(255,159,10,0.1)', padding: '4px 10px', borderRadius: '8px', fontWeight: '700', textTransform: 'uppercase' }}>
+                        Ambiguous
+                      </span>
+                    </div>
+
+                    {/* SELECT EXERCISE SEARCH BAR */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Select Standardized Movement
+                      </label>
+                      <ExerciseSearchSelector
+                        value={isSkipped ? '' : resolvedVal}
+                        onChange={val => setResolutions(prev => ({ ...prev, [resolutionKey]: val }))}
+                        allDbExercises={allDbExercises}
+                      />
+                    </div>
+
+                    {/* Visible action buttons */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px' }}>
+                      {resolvedVal && (
+                        <button
+                          onClick={() => setResolutions(prev => {
+                            const copy = { ...prev };
+                            delete copy[resolutionKey];
+                            return copy;
+                          })}
+                          style={{
+                            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '10px', padding: '8px 14px', color: 'white', fontWeight: '700',
+                            fontSize: '12px', cursor: 'pointer'
+                          }}
+                        >
+                          Reset
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={() => setResolutions(prev => ({ ...prev, [resolutionKey]: '__SKIP__' }))}
+                        style={{
+                          background: isSkipped ? 'rgba(0,122,255,0.2)' : 'rgba(255,255,255,0.04)', 
+                          border: isSkipped ? '1px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '10px', padding: '8px 14px', 
+                          color: isSkipped ? 'var(--accent-hover)' : 'rgba(255,255,255,0.7)', 
+                          fontWeight: '700', fontSize: '12px', cursor: 'pointer'
+                        }}
+                      >
+                        {isSkipped ? 'Skipped ✓' : 'Skip & Leave Raw'}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setReviewSessions(prev => prev.map((s, idx) => {
+                            if (idx !== sIdx) return s;
+                            return {
+                              ...s,
+                              exercises: s.exercises.filter(ex => ex.name !== amb.raw),
+                              ambiguous: s.ambiguous.filter(a => a.raw !== amb.raw)
+                            };
+                          }));
+                        }}
+                        style={{
+                          background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.2)',
+                          borderRadius: '10px', padding: '8px 14px', color: 'var(--error-color)', fontWeight: '700',
+                          fontSize: '12px', cursor: 'pointer', marginLeft: 'auto'
+                        }}
+                      >
+                        Remove Entry
+                      </button>
                     </div>
                   </div>
-                  <AmbiguityDropdown
-                    raw={amb.raw}
-                    options={amb.options ?? []}
-                    value={resolutions[`${sIdx}-${amb.raw}`] ?? ''}
-                    onChange={val => setResolutions(prev => ({ ...prev, [`${sIdx}-${amb.raw}`]: val }))}
-                  />
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -779,8 +1041,32 @@ export default function ImportWorkout() {
             </button>
           </div>
 
+          {/* Validation Warnings Panel */}
+          {validationWarnings.length > 0 && (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '10px', 
+              padding: '16px 20px', 
+              background: 'rgba(255,159,10,0.08)', 
+              border: '1px solid rgba(255,159,10,0.25)', 
+              borderRadius: '14px', 
+              marginBottom: '24px' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#FF9F0A', fontWeight: '800', fontSize: '14px' }}>
+                <AlertTriangle size={16} />
+                <span>Import Safety Warnings ({validationWarnings.length})</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: 'rgba(255,255,255,0.85)', display: 'flex', flexDirection: 'column', gap: '4px', fontWeight: '500' }}>
+                {validationWarnings.map((w, idx) => (
+                  <li key={idx}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Workout Sessions Cards list */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', marginBottom: '80px' }}>
             {reviewSessions.map((session, sIdx) => (
               <div 
                 key={sIdx} 
@@ -789,7 +1075,8 @@ export default function ImportWorkout() {
                   padding: '24px', 
                   margin: 0, 
                   border: '1px solid rgba(255,255,255,0.08)', 
-                  position: 'relative'
+                  position: 'relative',
+                  overflow: 'visible' // critical fix: prevent selector clipping
                 }}
               >
                 {/* Session Card Header */}
@@ -798,7 +1085,9 @@ export default function ImportWorkout() {
                     <div style={{ background: 'rgba(0,122,255,0.15)', padding: '8px', borderRadius: '10px' }}>
                       <Calendar size={18} color="var(--accent-hover)" />
                     </div>
-                    <span style={{ fontSize: '18px', fontWeight: '800', color: 'white' }}>Workout Day {sIdx + 1}</span>
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: 'white' }}>
+                      {formatParsedDate(session.date, session.split, sIdx)}
+                    </span>
                   </div>
                   <button
                     onClick={() => deleteSession(sIdx)}
@@ -848,13 +1137,16 @@ export default function ImportWorkout() {
                     return (
                       <div 
                         key={exIdx} 
-                        className="glass card animate-fade-in" 
+                        className="glass card ex-preview-card animate-fade-in" 
                         style={{ 
                           padding: '0', 
-                          overflow: 'hidden', 
+                          overflow: 'visible', // critical: allow searchable dropdown to overflow card cleanly
                           margin: 0, 
                           background: 'rgba(255,255,255,0.01)',
-                          border: isLowConfidence ? '1px dashed rgba(255,69,58,0.3)' : '1px solid rgba(255,255,255,0.04)' 
+                          border: isLowConfidence 
+                            ? '1px dashed rgba(255,69,58,0.35)' 
+                            : '1px solid rgba(255,255,255,0.05)',
+                          boxShadow: isLowConfidence ? '0 0 16px rgba(255,69,58,0.05)' : 'none'
                         }}
                       >
                         {/* Exercise Card Header */}
@@ -992,15 +1284,37 @@ export default function ImportWorkout() {
             </div>
           )}
 
-          <button
-            className="btn-primary"
-            onClick={handleImport}
-            disabled={reviewSessions.length === 0}
-            style={{ width: '100%', padding: '18px', fontSize: '16px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '8px' }}
-          >
-            <Upload size={20} />
-            Import {reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0)} Exercise{reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0) !== 1 ? 's' : ''}
-          </button>
+          {/* Sticky Bottom Premium Action Bar */}
+          <div className="sticky-action-bar animate-fade-in">
+            <div className="sticky-inner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Aggregate Summary
+                </span>
+                <span style={{ fontSize: '14px', fontWeight: '800', color: 'white' }}>
+                  {reviewSessions.length} Day{reviewSessions.length !== 1 ? 's' : ''} • {reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0)} Exercise{reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0) !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <button
+                className="btn-primary"
+                onClick={handleImport}
+                disabled={reviewSessions.length === 0}
+                style={{ 
+                  padding: '12px 28px', 
+                  fontSize: '15px', 
+                  borderRadius: '12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  cursor: 'pointer',
+                  border: 'none',
+                  fontWeight: '700'
+                }}
+              >
+                <Upload size={16} /> Import Workout Logs
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
