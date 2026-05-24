@@ -61,33 +61,43 @@ export default async function handler(req, res) {
 - Recovery/Rest Gaps: ${context.recoveryGaps ?? 'None'}`
       : 'No training logs available yet.';
 
-    const systemPrompt = `You are the ultimate AI Gym Coach, a elite conversational fitness assistant.
-Your ONLY domain is gym, workouts, training plans, progressive overload, recovery, calories, protein, and fitness.
-You must NEVER answer questions outside of this domain (e.g. history, geography, coding, recipes unrelated to high protein/fitness, general chat). If asked about anything outside this domain, politely and concisely refuse to answer (e.g. "As your AI Coach, I can only assist you with gym training, workouts, and nutrition goals. Let's get back to your workout!").
+    const systemPrompt = `You are the ultimate AI Gym Coach, an elite conversational fitness assistant.
+Your ONLY domain is training splits, workouts, progressive overload protocols, recovery parameters, macronutrients, calories, and athletic training.
+You must NEVER answer questions outside of this domain (e.g., coding, general history, recipes unrelated to high-protein macros, non-fitness chat). Refuse general topics politely and concisely: "As your AI Coach, I can only assist you with gym training, workouts, and nutrition goals. Let's get back to your training!"
 
 PERSONALIZED USER TRAINING CONTEXT:
 ${formattedContext}
 
-INSTRUCTIONS FOR SUGGESTING WORKOUT ROUTINES:
-If the user asks for a workout suggestion, routine, or training plan, suggest it clearly.
-At the very end of your response, you MUST append a structured JSON block inside a "\`\`\`workout-suggested" block. This is critical for the application UI to parse and allow the user to apply the workout.
-The JSON block must match this schema exactly:
-{
-  "split": "Push|Pull|Legs|Upper|Lower|Full Body|Custom",
-  "exercises": ["Full Name of Exercise 1", "Full Name of Exercise 2", "Full Name of Exercise 3"]
-}
+INTENT CLASSIFICATION RULES:
+You must classify the user request at the very end of your response inside this exact tag:
+__INTENT__: [nutrition|workout_generation|exercise_help|recovery|progression|general_fitness|unrelated]
+- nutrition: Vegetarian protein, macro limits, foods, diets, meal targets, calories, hydration.
+- workout_generation: Requests to suggest a workout routine, generate tomorrow's push/pull/legs session, or build custom training exercises.
+- exercise_help: Form tips, exercise explanations, posture guides, safety modifications.
+- recovery: Rest days guidelines, muscle soreness, overtraining fatigue, rest sleep.
+- progression: Overload schemes, lifting thresholds, breaking strength plateaus.
+- general_fitness: Cardio guidelines, conditioning, baseline metrics.
+- unrelated: Standard chat, recipes (non-high-protein), unrelated topics.
 
-Example ending of response:
-Here is a great chest day routine for you:
-...
-\`\`\`workout-suggested
-{
-  "split": "Push",
-  "exercises": ["Incline DB Press", "Lateral Raise", "Tricep Pushdown"]
-}
-\`\`\`
+SMART WORKOUT ROUTINE GENERATION RULES:
+If and ONLY if the user explicitly asks to generate a workout plan (intent: workout_generation), output a highly structured, logical routine:
+1. Exercise order: compound multi-joint movements first (e.g. Squat, Deadlift, Bench Press) matching their split, followed by assistance lifts and isolation.
+2. Structure each exercise inside your conversational text response strictly in this style:
+   - Exercise name
+   - Target Sets x Rep range (e.g., 3x8-10)
+   - Suggested starting weight (informed by their Strongest Lifts milestones context)
+   - Brief overload/progression reasoning (e.g., "+2.5kg from your best Chest Press")
+3. Append a structured JSON block inside a "\`\`\`workout-suggested" block at the absolute end of the response matching this schema:
+   {
+     "split": "Push|Pull|Legs|Upper|Lower|Full Body|Custom",
+     "exercises": ["Standardized Exercise Name 1", "Standardized Exercise Name 2"]
+   }
+   Use standard database exercise names.
 
-Strictly adhere to the domain boundaries. Be analytical, professional, and highly encouraging.`;
+DO NOT suggest workout cards or generate plan blocks for nutrition, technique, recovery, or unrelated questions. Answer those queries concisely and conversationally in plain text, then append the intent tag.
+
+Strictly end all responses with:
+__INTENT__: [intent_name]`;
 
     const chatMessages = [
       { role: 'system', content: systemPrompt },
@@ -98,7 +108,7 @@ Strictly adhere to the domain boundaries. Be analytical, professional, and highl
     const apiCallPromise = client.chat.completions.create({
       model: 'meta/llama-3.1-8b-instruct',
       temperature: 0.2,
-      max_tokens: 1024,
+      max_tokens: 512,
       messages: chatMessages,
     });
 
@@ -110,7 +120,18 @@ Strictly adhere to the domain boundaries. Be analytical, professional, and highl
     const completion = await Promise.race([apiCallPromise, timeoutPromise]);
     const responseText = completion.choices[0]?.message?.content ?? '';
 
-    return res.status(200).json({ text: responseText });
+    // ── Parse & Extract Intent Server-Side ────────────────────────────────────
+    let parsedIntent = 'general_fitness';
+    let cleanedResponseText = responseText;
+
+    const intentMatch = responseText.match(/__INTENT__:\s*(\w+)/i);
+    if (intentMatch) {
+      parsedIntent = intentMatch[1].trim().toLowerCase();
+      // Scrub tag and cleanup whitespace
+      cleanedResponseText = responseText.replace(/__INTENT__:\s*\w+/i, '').trim();
+    }
+
+    return res.status(200).json({ text: cleanedResponseText, intent: parsedIntent });
   } catch (err) {
     console.error('[AI_CHAT] Exception occurred:', err.message);
     const isTimeout = err.message?.includes('timeout') || err.message?.includes('timeout limit');

@@ -163,30 +163,61 @@ function AICoach() {
       if (cachedItem && Date.now() - cachedItem.timestamp < 60 * 60 * 1000) {
         // Natural brief loader delay to feel organic
         setTimeout(() => {
-          setMessages(prev => [...prev, { role: 'assistant', content: cachedItem.response }]);
+          setMessages(prev => [
+            ...prev,
+            { role: 'assistant', content: cachedItem.response, intent: cachedItem.intent }
+          ]);
           setLoading(false);
         }, 500);
         return;
       }
     } catch (e) {}
 
-    try {
-      const res = await fetch('/api/ai-chat', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          messages: [...messages, userMessage],
-          context
-        })
-      });
+    let attempt = 1;
+    let success = false;
+    let data = null;
+    let lastError = null;
 
-      const data = await res.json();
+    while (attempt <= 2 && !success) {
+      const controller = new AbortController();
+      const abortTimeout = setTimeout(() => {
+        controller.abort();
+      }, 9000); // 9000ms AbortController timeout
 
-      if (!res.ok) {
-        throw new Error(data.error ?? 'AI Coach is temporarily overloaded. Try again in a few seconds.');
+      try {
+        const res = await fetch('/api/ai-chat', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal:  controller.signal,
+          body:    JSON.stringify({
+            messages: [...messages, userMessage],
+            context
+          })
+        });
+
+        clearTimeout(abortTimeout);
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ?? `Server error (${res.status})`);
+        }
+
+        data = await res.json();
+        success = true;
+      } catch (err) {
+        clearTimeout(abortTimeout);
+        lastError = err;
+        console.warn(`[AI_CHAT] Attempt ${attempt} failed:`, err.message);
+        if (attempt === 1) {
+          // Wait 500ms before automatic retry
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
+      attempt++;
+    }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+    if (success && data) {
+      setMessages(prev => [...prev, { role: 'assistant', content: data.text, intent: data.intent }]);
 
       // Store response inside prompt cache
       try {
@@ -195,50 +226,34 @@ function AICoach() {
         const cacheMap = rawCache ? JSON.parse(rawCache) : {};
         cacheMap[cleanPrompt] = {
           response: data.text,
+          intent: data.intent,
           timestamp: Date.now()
         };
         localStorage.setItem('wtp_coach_chat_cache', JSON.stringify(cacheMap));
       } catch (e) {}
-
-    } catch (err) {
-      console.error('[AI_CHAT] Chat error:', err.message);
+    } else {
+      console.error('[AI_CHAT] All retry attempts exhausted:', lastError?.message);
       setMessages(prev => [
         ...prev,
         {
           role:    'assistant',
           content: '⚠️ AI Coach is temporarily overloaded. Try again in a few seconds.',
+          intent:  'unrelated'
         }
       ]);
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
-
-  // ── Parse Suggested Workouts from Assistant Text ──────────────────────────
-  const getSuggestedWorkout = () => {
-    const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
-    if (!lastAssistantMessage) return null;
-
-    const match = lastAssistantMessage.content.match(/```workout-suggested([\s\S]*?)```/);
-    if (!match) return null;
-
-    try {
-      return JSON.parse(match[1].trim());
-    } catch {
-      return null;
-    }
-  };
-
-  const suggestedWorkout = getSuggestedWorkout();
 
   // ── Apply Suggested Workout ───────────────────────────────────────────────
-  const handleApplyWorkout = async () => {
-    if (!suggestedWorkout || applying || !user) return;
+  const handleApplyWorkout = async (workoutToApply) => {
+    if (!workoutToApply || applying || !user) return;
     setApplying(true);
 
     try {
       const builtExercises = await Promise.all(
-        suggestedWorkout.exercises.map(async (item) => {
+        workoutToApply.exercises.map(async (item) => {
           // Resolve item name (can be string or object)
           const name = typeof item === 'object' && item !== null ? item.name : item;
           const aiWeight = typeof item === 'object' && item !== null ? item.weight : null;
@@ -283,7 +298,7 @@ function AICoach() {
           } catch { /* no previous data */ }
 
           // Resolve targets: AI explicit > User Best Performance > default values
-          const targetObj = suggestedWorkout.targets?.[name];
+          const targetObj = workoutToApply.targets?.[name];
           const finalSuggestedWeight = targetObj?.weight ?? aiWeight ?? bestWeight ?? '';
           const finalSuggestedReps = targetObj?.reps ?? aiReps ?? bestReps ?? '12';
 
@@ -304,7 +319,7 @@ function AICoach() {
         userId: user.id,
         savedAt: Date.now(),
         splitType: 'Custom',
-        splitDay: suggestedWorkout.split ?? 'Push',
+        splitDay: workoutToApply.split ?? 'Push',
         workoutDate: new Date().toLocaleDateString('en-CA'),
         sessionExercises: builtExercises
       };
@@ -328,9 +343,9 @@ function AICoach() {
         .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-hover); animation: typingBounce 1s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-        .coach-chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flexDirection: column; gap: 16px; border-radius: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.06); }
-        .message-bubble { max-width: 80%; border-radius: 18px; padding: 12px 18px; font-size: 14px; line-height: 1.6; font-weight: 500; }
-        .message-bubble.assistant { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.9); border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.04); }
+        .coach-chat-box { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px; display: flex; flex-direction: column; gap: 16px; border-radius: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.06); min-height: 0; }
+        .message-bubble { max-width: 85%; border-radius: 18px; padding: 12px 18px; font-size: 14px; line-height: 1.6; font-weight: 500; display: flex; flex-direction: column; width: fit-content; word-break: break-word; }
+        .message-bubble.assistant { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.9); border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.04); align-self: flex-start; }
         .message-bubble.user { background: var(--accent-color); color: white; align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 4px 16px rgba(0,122,255,0.25); }
       `}</style>
 
@@ -352,8 +367,17 @@ function AICoach() {
         {messages.map((msg, idx) => {
           // Format text cleanly (remove code blocks from visual render if it is suggestedWorkout block)
           let cleanContent = msg.content;
+          let suggestedWorkoutForMsg = null;
           if (msg.role === 'assistant') {
             cleanContent = cleanContent.replace(/```workout-suggested([\s\S]*?)```/g, '').trim();
+            const match = msg.content.match(/```workout-suggested([\s\S]*?)```/);
+            if (match && msg.intent === 'workout_generation') {
+              try {
+                suggestedWorkoutForMsg = JSON.parse(match[1].trim());
+              } catch (e) {
+                console.error('Failed to parse suggested workout JSON from message:', e);
+              }
+            }
           }
 
           return (
@@ -366,7 +390,67 @@ function AICoach() {
                 {msg.role === 'assistant' ? <Bot size={13} /> : <UserIcon size={13} />}
                 {msg.role === 'assistant' ? 'AI Coach' : 'You'}
               </div>
-              <div>{cleanContent}</div>
+              <div style={{ wordBreak: 'break-word' }}>{cleanContent}</div>
+
+              {/* ── Suggested Workout Hydration Block (Inline) ── */}
+              {suggestedWorkoutForMsg && (
+                <div 
+                  className="glass card animate-fade-in" 
+                  style={{ 
+                    marginTop: '12px', 
+                    borderLeft: '4px solid var(--accent-hover)', 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    padding: '12px', 
+                    borderRadius: '12px', 
+                    width: '100%',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <Dumbbell size={15} color="var(--accent-hover)" />
+                    <span style={{ fontWeight: '800', fontSize: '13px', color: 'white' }}>Suggested Workout Routine</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginBottom: '12px' }}>
+                    Split Day: <strong style={{ color: 'white' }}>{suggestedWorkoutForMsg.split ?? 'Custom'}</strong>
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {suggestedWorkoutForMsg.exercises.map((ex, i) => {
+                        const name = typeof ex === 'object' && ex !== null ? ex.name : ex;
+                        const weight = typeof ex === 'object' && ex !== null ? ex.weight : null;
+                        const reps = typeof ex === 'object' && ex !== null ? ex.reps : null;
+                        const spec = weight && reps ? ` (${weight}kg × ${reps})` : '';
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)' }} />
+                            <span style={{ color: 'rgba(255,255,255,0.85)' }}>{name}{spec}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleApplyWorkout(suggestedWorkoutForMsg)}
+                    disabled={applying}
+                    className="btn-primary"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px 12px', 
+                      fontSize: '12px', 
+                      borderRadius: '8px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '6px',
+                      cursor: 'pointer',
+                      border: 'none',
+                      fontWeight: '700'
+                    }}
+                  >
+                    {applying ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    {applying ? 'Preloading Workout...' : 'Apply Suggested Workout'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -376,36 +460,6 @@ function AICoach() {
             <div className="typing-dot" />
             <div className="typing-dot" />
             <div className="typing-dot" />
-          </div>
-        )}
-
-        {/* ── Suggested Workout Hydration Block ── */}
-        {suggestedWorkout && !loading && (
-          <div className="glass card animate-fade-in" style={{ alignSelf: 'flex-start', maxWidth: '380px', borderLeft: '4px solid var(--accent-hover)', background: 'rgba(0,122,255,0.05)', margin: '10px 0', width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <Dumbbell size={16} color="var(--accent-hover)" />
-              <span style={{ fontWeight: '800', fontSize: '14px', color: 'white' }}>Suggested Workout Routine</span>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginBottom: '14px' }}>
-              Split Day: <strong style={{ color: 'white' }}>{suggestedWorkout.split ?? 'Custom'}</strong>
-              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {suggestedWorkout.exercises.map((ex, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)' }} />
-                    <span style={{ color: 'rgba(255,255,255,0.85)' }}>{ex}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button
-              onClick={handleApplyWorkout}
-              disabled={applying}
-              className="btn-primary"
-              style={{ width: '100%', padding: '12px', fontSize: '13px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-            >
-              {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              {applying ? 'Preloading Workout...' : 'Apply Suggested Workout'}
-            </button>
           </div>
         )}
 
