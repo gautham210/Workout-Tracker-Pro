@@ -1,7 +1,11 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import NetworkToast from './NetworkToast';
 
 const MainLayout = () => {
+  const { networkError } = useAuth();
+
   return (
     <div className="app-layout">
       <div className="particles-layer"></div>
@@ -72,6 +76,9 @@ const MainLayout = () => {
           <span>Profile</span>
         </NavLink>
       </nav>
+
+      {/* Global network status toast */}
+      <NetworkToast supabaseError={networkError} />
     </div>
   );
 };

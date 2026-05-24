@@ -1,17 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Search, X, Dumbbell, Trash, Check, Loader2, CheckCircle, Zap, Calendar, Repeat } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 
-// Returns today as YYYY-MM-DD in local timezone
+// ── Utilities ─────────────────────────────────────────────────────────────────
 const todayLocalISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-// Format YYYY-MM-DD → "Mon, Feb 23"
 const formatDateLabel = (iso) => {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -22,48 +21,146 @@ const SPLITS_MAP = {
   "Bro Split":     ["Chest", "Back", "Shoulders", "Arms", "Legs"],
   "Upper / Lower": ["Upper", "Lower"],
   "Full Body":     ["Full Body"],
-  "Custom":        [], // populated dynamically from loop/profile
+  "Custom":        [],
 };
-
-// All selectable split types — "Custom" is always last and only shown when relevant
 const SPLIT_KEYS = ["PPL", "Bro Split", "Upper / Lower", "Full Body"];
 
+// ── localStorage keys ─────────────────────────────────────────────────────────
+const DRAFT_KEY  = 'wtp_workout_draft_v2';
+const DRAFT_TTL  = 24 * 60 * 60 * 1000; // 24 hours — auto-expire stale drafts
+
+// ── Draft helpers ─────────────────────────────────────────────────────────────
+function saveDraft(userId, state) {
+  try {
+    const draft = { userId, savedAt: Date.now(), ...state };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch { /* storage full — ignore */ }
+}
+
+function loadDraft(userId) {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    if (draft.userId !== userId) return null; // different user
+    if (Date.now() - draft.savedAt > DRAFT_TTL) {
+      localStorage.removeItem(DRAFT_KEY);
+      return null; // expired
+    }
+    if (!draft.sessionExercises?.length) return null; // empty draft not worth restoring
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function WorkoutActive() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
-  const [splitType, setSplitType] = useState('PPL');
-  const [splitDay,  setSplitDay]  = useState('Push');
-  const [sessionExercises, setSessionExercises] = useState([]);
-  const [workoutDate, setWorkoutDate] = useState(todayLocalISO);
+  // ── Core session state ────────────────────────────────────────────────────
+  const [splitType,         setSplitType]         = useState('PPL');
+  const [splitDay,          setSplitDay]          = useState('Push');
+  const [sessionExercises,  setSessionExercises]  = useState([]);
+  const [workoutDate,       setWorkoutDate]       = useState(todayLocalISO);
   const dateInputRef = useRef(null);
 
-  const [isSearching,    setIsSearching]    = useState(false);
-  const [searchQuery,    setSearchQuery]    = useState('');
-  const [searchResults,  setSearchResults]  = useState([]);
-  const [isSearchLoading,setIsSearchLoading]= useState(false);
-  const [searchError,    setSearchError]    = useState(null);
+  // ── Resume banner state ───────────────────────────────────────────────────
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
+  const [pendingDraft,     setPendingDraft]     = useState(null);
+  const resumeCheckedRef = useRef(false);
 
-  const [saving,          setSaving]          = useState(false);
-  const [saveError,       setSaveError]       = useState(null);
-  const [isCompleteMode,  setIsCompleteMode]  = useState(false);
-  const [completionData,  setCompletionData]  = useState({ vol: 0, sets: 0, prs: [] });
+  // ── Search state ──────────────────────────────────────────────────────────
+  const [isSearching,     setIsSearching]     = useState(false);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [searchResults,   setSearchResults]   = useState([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError,     setSearchError]     = useState(null);
 
-  // Loop template state
+  // ── Save / completion state ───────────────────────────────────────────────
+  const [saving,         setSaving]         = useState(false);
+  const [saveError,      setSaveError]      = useState(null);
+  const [isCompleteMode, setIsCompleteMode] = useState(false);
+  const [completionData, setCompletionData] = useState({ vol: 0, sets: 0, prs: [] });
+
+  // ── Loop template state ───────────────────────────────────────────────────
   const [loopPreloading, setLoopPreloading] = useState(false);
   const [loopDayName,    setLoopDayName]    = useState(null);
   const [lastWeights,    setLastWeights]    = useState({});
   const [loopTrigger,    setLoopTrigger]    = useState(0);
 
-  // Focus Mode background
+  // Autosave debounce timer ref
+  const autosaveTimerRef = useRef(null);
+
+  // ── Dark background for focus mode ────────────────────────────────────────
   useEffect(() => {
     document.body.style.background = '#06090c';
     return () => { document.body.style.background = 'var(--bg-color)'; };
   }, []);
 
-  // ── Loop template preload ──────────────────────────────────────────────────
+  // ── Check for draft on mount (once) ──────────────────────────────────────
+  useEffect(() => {
+    if (!user || resumeCheckedRef.current) return;
+    resumeCheckedRef.current = true;
+
+    const draft = loadDraft(user.id);
+    if (draft) {
+      setPendingDraft(draft);
+      setShowResumeBanner(true);
+    }
+  }, [user]);
+
+  // ── Autosave: debounced whenever session state changes ────────────────────
+  const autosave = useCallback(() => {
+    if (!user) return;
+    // Don't save if nothing meaningful exists
+    if (sessionExercises.length === 0) {
+      clearDraft();
+      return;
+    }
+    clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      saveDraft(user.id, {
+        splitType,
+        splitDay,
+        workoutDate,
+        sessionExercises,
+      });
+    }, 800); // 800ms debounce — avoids saving every keystroke
+  }, [user, splitType, splitDay, workoutDate, sessionExercises]);
+
+  useEffect(() => {
+    autosave();
+    return () => clearTimeout(autosaveTimerRef.current);
+  }, [autosave]);
+
+  // ── Resume handlers ───────────────────────────────────────────────────────
+  const handleResume = () => {
+    if (!pendingDraft) return;
+    setSplitType(pendingDraft.splitType ?? 'PPL');
+    setSplitDay(pendingDraft.splitDay   ?? 'Push');
+    setWorkoutDate(pendingDraft.workoutDate ?? todayLocalISO());
+    setSessionExercises(pendingDraft.sessionExercises ?? []);
+    setShowResumeBanner(false);
+    setPendingDraft(null);
+  };
+
+  const handleDiscard = () => {
+    clearDraft();
+    setShowResumeBanner(false);
+    setPendingDraft(null);
+  };
+
+  // ── Loop template preload ─────────────────────────────────────────────────
   useEffect(() => {
     if (!profile?.active_loop || !user) return;
+    // Don't overwrite a resumed draft
+    if (showResumeBanner) return;
     const loop = profile.active_loop;
     const days = loop.days ?? [];
     if (!days.length) return;
@@ -112,7 +209,7 @@ export default function WorkoutActive() {
           );
           weightMap[ex.id] = {
             weight: parseFloat(best.weight_kg) || 0,
-            reps:   parseInt(best.reps, 10)     || 15,
+            reps:   parseInt(best.reps, 10)    || 15,
           };
         }
       }));
@@ -139,14 +236,13 @@ export default function WorkoutActive() {
 
     preload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, user, loopTrigger]);
+  }, [profile, user, loopTrigger, showResumeBanner]);
 
-  // Determine effective split options based on current splitType
+  // ── Derived state ─────────────────────────────────────────────────────────
   const effectiveDays = splitType === 'Custom'
     ? (profile?.custom_split?.length > 0 ? profile.custom_split : [splitDay])
     : (SPLITS_MAP[splitType] ?? ['Custom']);
 
-  // Available split type keys — include "Custom" if loop or custom_split is active
   const availableSplitKeys = profile?.active_loop || profile?.custom_split?.length > 0
     ? [...SPLIT_KEYS, 'Custom']
     : SPLIT_KEYS;
@@ -163,7 +259,7 @@ export default function WorkoutActive() {
     }
   };
 
-  // ── Exercise search ──────────────────────────────────────────────────────
+  // ── Exercise search ───────────────────────────────────────────────────────
   useEffect(() => {
     if (searchQuery.trim().length === 0) {
       setSearchResults([]);
@@ -242,23 +338,18 @@ export default function WorkoutActive() {
     setSessionExercises(prev => prev.filter((_, i) => i !== exIndex));
   };
 
+  // ── Save session ──────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (sessionExercises.length === 0) return;
     setSaving(true);
     setSaveError(null);
 
-    const [y, m, d]   = workoutDate.split('-').map(Number);
+    const [y, m, d]     = workoutDate.split('-').map(Number);
     const sessionDateISO = new Date(y, m - 1, d, 12, 0, 0).toISOString();
 
     const { data: sessionData, error: sessionError } = await supabase
       .from('workout_sessions')
-      .insert({
-        user_id:    user.id,
-        date:       sessionDateISO,
-        split_type: splitType,
-        split_day:  splitDay,
-        notes:      '',
-      })
+      .insert({ user_id: user.id, date: sessionDateISO, split_type: splitType, split_day: splitDay, notes: '' })
       .select()
       .single();
 
@@ -279,14 +370,13 @@ export default function WorkoutActive() {
         if (s.reps === '') return;
         const w = parseFloat(s.weight_kg) || 0;
         const r = parseInt(s.reps, 10) || 0;
-        currentExVol += w * r;
-        totalVol     += w * r;
+        currentExVol   += w * r;
+        totalVol       += w * r;
         totalSetsCount++;
-        if (w > currentMaxW)                          { currentMaxW = w; currentMaxRAtW = r; }
+        if (w > currentMaxW)                            { currentMaxW = w; currentMaxRAtW = r; }
         else if (w === currentMaxW && r > currentMaxRAtW) { currentMaxRAtW = r; }
       });
 
-      // PR check
       const { data: pastExData } = await supabase
         .from('session_exercises')
         .select('sets(weight_kg, reps), workout_sessions!inner(user_id, date)')
@@ -335,6 +425,9 @@ export default function WorkoutActive() {
       }
     }
 
+    // ── Clear draft after successful save ─────────────────────────────────
+    clearDraft();
+
     setCompletionData({ vol: totalVol, sets: totalSetsCount, prs: prsFound });
     setSaving(false);
     setIsCompleteMode(true);
@@ -343,7 +436,7 @@ export default function WorkoutActive() {
   // ── Completion Screen ─────────────────────────────────────────────────────
   if (isCompleteMode) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: '#0b0f14', display: 'flex', flexDirection: 'column', padding: '24px', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
+      <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000, background:'#0b0f14', display:'flex', flexDirection:'column', padding:'24px', alignItems:'center', justifyContent:'center', overflowY:'auto' }}>
         <style>{`
           @keyframes scaleCheck { 0% { transform:scale(0.5); opacity:0; } 70% { transform:scale(1.1); box-shadow:0 0 60px rgba(48,209,88,0.4); } 100% { transform:scale(1); opacity:1; box-shadow:0 0 40px rgba(48,209,88,0.2); } }
           .pr-badge { animation: prPop 0.5s cubic-bezier(0.2,0.8,0.2,1) forwards; }
@@ -351,6 +444,7 @@ export default function WorkoutActive() {
           .stagger-1 { animation:prPop 0.4s ease forwards 100ms; opacity:0; }
           .stagger-2 { animation:prPop 0.4s ease forwards 200ms; opacity:0; }
           .stagger-3 { animation:prPop 0.4s ease forwards 300ms; opacity:0; }
+          @keyframes spinKey { 100% { transform: rotate(360deg); } }
         `}</style>
 
         <div style={{ background:'rgba(48,209,88,0.1)', padding:'24px', borderRadius:'50%', marginBottom:'32px', animation:'scaleCheck 0.6s cubic-bezier(0.2,0.8,0.2,1) forwards' }}>
@@ -431,51 +525,55 @@ export default function WorkoutActive() {
 
   // ── Main Workout UI ───────────────────────────────────────────────────────
   return (
-    <div className="page-enter" style={{ position: 'relative', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' }}>
+    <div className="page-enter" style={{ position:'relative', paddingBottom:'calc(100px + env(safe-area-inset-bottom, 0px))' }}>
       <style>{`
         @keyframes spinKey { 100% { transform: rotate(360deg); } }
         .animate-spin { animation: spinKey 1s linear infinite; }
-        .focus-input { appearance:none; background:transparent; border:none; color:white; outline:none; font-weight:800; font-size:22px; padding:10px 14px; border-radius:14px; transition:all 0.2s; }
-        .focus-input:hover { background:rgba(255,255,255,0.05); }
         .date-chip { display:inline-flex; align-items:center; gap:7px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:100px; padding:7px 14px; cursor:pointer; transition:all 0.2s; user-select:none; }
         .date-chip:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); }
         .date-chip.changed { border-color:var(--accent-color); background:rgba(0,122,255,0.1); }
         .date-input-hidden { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
         .conclude-bar {
           position: fixed;
-          bottom: calc(env(safe-area-inset-bottom, 0px));
+          bottom: 0;
           left: 0; right: 0;
-          padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
-          background: rgba(6,9,12,0.92);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border-top: 1px solid rgba(255,255,255,0.06);
+          padding: 12px 20px;
+          padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+          background: rgba(6,9,12,0.96);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          border-top: 1px solid rgba(255,255,255,0.08);
           z-index: 50;
           display: flex;
           justify-content: center;
         }
         @media (min-width: 768px) {
-          .conclude-bar {
-            left: 250px;
-            padding-bottom: 16px;
-          }
+          .conclude-bar { left: 250px; padding-bottom: 16px; }
         }
         .set-row-input {
-          background: transparent;
-          border: none;
-          color: #fff;
-          font-size: 20px;
-          font-weight: 800;
-          outline: none;
-          text-align: right;
-          width: 100%;
-          min-width: 0;
+          background: transparent; border: none; color: #fff;
+          font-size: 20px; font-weight: 800; outline: none;
+          text-align: right; width: 100%; min-width: 0;
         }
         @media (max-width: 767px) {
           .set-row-input { font-size: 17px; }
           .ex-name { font-size: 17px !important; }
           .set-label { font-size: 13px !important; }
           .unit-label { font-size: 12px !important; }
+        }
+        .resume-banner {
+          background: rgba(0,122,255,0.08);
+          border: 1px solid rgba(0,122,255,0.3);
+          border-radius: 16px;
+          padding: 16px 18px;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+        @media (max-width: 480px) {
+          .resume-banner { flex-direction: column; align-items: flex-start; gap: 10px; }
+          .resume-banner-btns { width: 100%; }
         }
       `}</style>
 
@@ -502,18 +600,11 @@ export default function WorkoutActive() {
               {isSearchLoading && <Loader2 className="animate-spin" size={22} color="var(--text-secondary)" />}
             </div>
             <div style={{ flex:1, overflowY:'auto', paddingBottom:'80px' }}>
-              {searchError && (
-                <div style={{ padding:'14px', color:'var(--error-color)', fontSize:'14px', fontWeight:'600' }}>{searchError}</div>
-              )}
+              {searchError && <div style={{ padding:'14px', color:'var(--error-color)', fontSize:'14px', fontWeight:'600' }}>{searchError}</div>}
               {searchResults.length > 0 && (
                 <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
                   {searchResults.map(ex => (
-                    <div
-                      key={ex.id}
-                      className="glass interactive-card"
-                      style={{ padding:'18px 22px', cursor:'pointer', margin:0 }}
-                      onClick={() => addExercise(ex)}
-                    >
+                    <div key={ex.id} className="glass interactive-card" style={{ padding:'18px 22px', cursor:'pointer', margin:0 }} onClick={() => addExercise(ex)}>
                       <div style={{ fontWeight:'800', fontSize:'19px', color:'white', marginBottom:'4px' }}>{ex.name}</div>
                       <div style={{ color:'var(--text-secondary)', fontWeight:'600', fontSize:'13px' }}>{ex.muscle_group}</div>
                     </div>
@@ -530,13 +621,37 @@ export default function WorkoutActive() {
 
       {/* ── Header ── */}
       <div style={{ marginTop:'16px', marginBottom:'24px' }}>
-        {loopDayName && (
+
+        {/* ── Resume banner ── */}
+        {showResumeBanner && pendingDraft && (
+          <div className="resume-banner">
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:'800', fontSize:'15px', color:'white', marginBottom:'4px' }}>
+                Resume unfinished workout?
+              </div>
+              <div style={{ fontSize:'12px', color:'var(--text-secondary)', fontWeight:'600' }}>
+                {pendingDraft.splitType} — {pendingDraft.splitDay} · {pendingDraft.sessionExercises?.length} exercise{pendingDraft.sessionExercises?.length !== 1 ? 's' : ''} · saved {new Date(pendingDraft.savedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}
+              </div>
+            </div>
+            <div className="resume-banner-btns" style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+              <button onClick={handleDiscard} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.12)', borderRadius:'10px', color:'var(--text-secondary)', padding:'8px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}>
+                Discard
+              </button>
+              <button onClick={handleResume} style={{ background:'rgba(0,122,255,0.15)', border:'1px solid rgba(0,122,255,0.4)', borderRadius:'10px', color:'var(--accent-hover)', padding:'8px 14px', fontSize:'13px', fontWeight:'800', cursor:'pointer' }}>
+                Continue ↗
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loopDayName && !showResumeBanner && (
           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px', padding:'7px 12px', background:'rgba(48,209,88,0.07)', border:'1px solid rgba(48,209,88,0.2)', borderRadius:'10px' }}>
             <Repeat size={12} color="#30D158" />
             <span style={{ fontSize:'11px', fontWeight:'700', color:'#30D158', letterSpacing:'1px', textTransform:'uppercase' }}>From your active program</span>
             {loopPreloading && <Loader2 size={12} color="#30D158" className="animate-spin" style={{ marginLeft:'auto' }} />}
           </div>
         )}
+
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', gap:'12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'12px', minWidth:0 }}>
             <h1 className="title" style={{ margin:0, fontSize:'28px', whiteSpace:'nowrap' }}>Active Block</h1>
@@ -545,6 +660,7 @@ export default function WorkoutActive() {
                 onClick={() => {
                   if (window.confirm('Reset the current session?')) {
                     setSessionExercises([]);
+                    clearDraft();
                     setSplitDay(effectiveDays[0] || 'Push');
                   }
                 }}
@@ -555,7 +671,6 @@ export default function WorkoutActive() {
             )}
           </div>
 
-          {/* Date chip */}
           <div
             className={`date-chip${workoutDate !== todayLocalISO() ? ' changed' : ''}`}
             onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
@@ -566,32 +681,14 @@ export default function WorkoutActive() {
             <span style={{ fontSize:'12px', fontWeight:'700', color: workoutDate !== todayLocalISO() ? 'var(--accent-hover)' : 'var(--text-secondary)', whiteSpace:'nowrap' }}>
               {formatDateLabel(workoutDate)}
             </span>
-            <input
-              ref={dateInputRef}
-              type="date"
-              className="date-input-hidden"
-              value={workoutDate}
-              max={todayLocalISO()}
-              onChange={e => setWorkoutDate(e.target.value)}
-            />
+            <input ref={dateInputRef} type="date" className="date-input-hidden" value={workoutDate} max={todayLocalISO()} onChange={e => setWorkoutDate(e.target.value)} />
           </div>
         </div>
 
-        {/* Split selectors */}
         <div className="glass" style={{ display:'flex', gap:'0', padding:'4px', borderRadius:'22px', alignItems:'center' }}>
-          <Dropdown
-            value={splitType}
-            options={availableSplitKeys}
-            onChange={handleSplitTypeChange}
-            accentColor="var(--accent-color)"
-          />
+          <Dropdown value={splitType} options={availableSplitKeys} onChange={handleSplitTypeChange} accentColor="var(--accent-color)" />
           <div style={{ width:'1px', background:'rgba(255,255,255,0.1)', height:'28px', flexShrink:0 }} />
-          <Dropdown
-            value={splitDay}
-            options={effectiveDays.length > 0 ? effectiveDays : [splitDay || 'Custom']}
-            onChange={setSplitDay}
-            accentColor="white"
-          />
+          <Dropdown value={splitDay} options={effectiveDays.length > 0 ? effectiveDays : [splitDay || 'Custom']} onChange={setSplitDay} accentColor="white" />
         </div>
       </div>
 
@@ -610,7 +707,6 @@ export default function WorkoutActive() {
         <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'16px' }}>
           {sessionExercises.map((item, exIdx) => (
             <div key={exIdx} className="glass card animate-fade-in" style={{ padding:'0', overflow:'hidden', margin:0 }}>
-              {/* Exercise header */}
               <div style={{ padding:'18px 20px', background:'rgba(255,255,255,0.02)', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
                   <h3 className="ex-name" style={{ margin:0, color:'#fff', fontSize:'19px', fontWeight:'800', letterSpacing:'-0.3px' }}>{item.exercise.name}</h3>
@@ -624,48 +720,39 @@ export default function WorkoutActive() {
                   onClick={() => removeExercise(exIdx)}
                   style={{ background:'none', border:'none', padding:'8px', cursor:'pointer', color:'var(--text-secondary)', display:'flex', borderRadius:'8px', transition:'background 0.2s' }}
                   onMouseOver={e => { e.currentTarget.style.background='rgba(255,69,58,0.1)'; e.currentTarget.style.color='var(--error-color)'; }}
-                  onMouseOut={e => { e.currentTarget.style.background='none'; e.currentTarget.style.color='var(--text-secondary)'; }}
+                  onMouseOut={e  => { e.currentTarget.style.background='none'; e.currentTarget.style.color='var(--text-secondary)'; }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              {/* Sets */}
               <div style={{ padding:'16px 20px' }}>
                 {item.sets.map((setInfo, setIdx) => (
                   <div key={setIdx} style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
                     <div className="set-label" style={{ width:'36px', fontWeight:'800', color:'var(--text-secondary)', fontSize:'14px', flexShrink:0 }}>S{setIdx + 1}</div>
                     <div style={{ flex:1, display:'flex', alignItems:'center', background:'rgba(0,0,0,0.35)', borderRadius:'14px', padding:'5px 14px', border:'1px solid rgba(255,255,255,0.05)' }}>
                       <input
-                        type="number"
-                        placeholder="0"
-                        value={setInfo.weight_kg}
+                        type="number" placeholder="0" value={setInfo.weight_kg}
                         onChange={e => updateSet(exIdx, setIdx, 'weight_kg', e.target.value)}
                         className="set-row-input"
+                        inputMode="decimal"
                       />
                       <span className="unit-label" style={{ color:'var(--text-secondary)', marginLeft:'6px', fontSize:'13px', marginRight:'14px', fontWeight:'700', flexShrink:0 }}>kg</span>
                       <span style={{ color:'var(--accent-hover)', fontWeight:'800', fontSize:'16px', flexShrink:0 }}>×</span>
                       <input
-                        type="number"
-                        placeholder="0"
-                        value={setInfo.reps}
+                        type="number" placeholder="0" value={setInfo.reps}
                         onChange={e => updateSet(exIdx, setIdx, 'reps', e.target.value)}
                         className="set-row-input"
+                        inputMode="numeric"
                       />
                       <span className="unit-label" style={{ color:'var(--text-secondary)', marginLeft:'6px', fontSize:'13px', fontWeight:'700', flexShrink:0 }}>reps</span>
                     </div>
-                    <button
-                      onClick={() => removeSet(exIdx, setIdx)}
-                      style={{ background:'none', border:'none', padding:'6px', cursor:'pointer', display:'flex', flexShrink:0 }}
-                    >
+                    <button onClick={() => removeSet(exIdx, setIdx)} style={{ background:'none', border:'none', padding:'6px', cursor:'pointer', display:'flex', flexShrink:0 }}>
                       <Trash size={16} color="var(--error-color)" />
                     </button>
                   </div>
                 ))}
-                <button
-                  onClick={() => addSet(exIdx)}
-                  style={{ width:'100%', padding:'13px', background:'transparent', border:'1px dashed rgba(255,255,255,0.12)', borderRadius:'14px', color:'var(--text-secondary)', fontWeight:'700', cursor:'pointer', marginTop:'8px', fontSize:'14px' }}
-                >
+                <button onClick={() => addSet(exIdx)} style={{ width:'100%', padding:'13px', background:'transparent', border:'1px dashed rgba(255,255,255,0.12)', borderRadius:'14px', color:'var(--text-secondary)', fontWeight:'700', cursor:'pointer', marginTop:'8px', fontSize:'14px' }}>
                   + Add Set
                 </button>
               </div>
@@ -674,7 +761,6 @@ export default function WorkoutActive() {
         </div>
       )}
 
-      {/* ── Add Exercise Button ── */}
       <button
         className="btn-secondary"
         onClick={() => setIsSearching(true)}
@@ -689,7 +775,6 @@ export default function WorkoutActive() {
         </div>
       )}
 
-      {/* ── Conclude Bar (fixed, above mobile nav) ── */}
       {sessionExercises.length > 0 && (
         <div className="conclude-bar">
           <button

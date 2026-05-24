@@ -24,8 +24,12 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  /* dvh = dynamic viewport height — shrinks with keyboard open, stable on mobile */
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
+  /* Prevent pull-to-refresh bouncing while logging sets */
+  overscroll-behavior-y: none;
 }
 
 h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
@@ -162,6 +166,8 @@ h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   text-decoration: none;
+  /* Eliminate 300ms tap delay on iOS Safari */
+  touch-action: manipulation;
 }
 
 .btn-primary {
