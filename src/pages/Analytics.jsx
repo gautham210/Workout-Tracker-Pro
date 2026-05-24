@@ -88,13 +88,13 @@ export default function Analytics() {
             const vol = r * w;
             totalVolume += vol;
 
-            // Muscle volume (volume-weighted, not just frequency)
-            if (muscle) {
+            // Muscle volume — guard against null muscle_group
+            if (muscle && typeof muscle === 'string' && muscle.trim()) {
               muscleVolume[muscle] = (muscleVolume[muscle] || 0) + vol;
             }
 
-            // Track per-exercise max weight (for strongest lift)
-            if (name) {
+            // Track per-exercise max weight (for strongest lift) — guard null name
+            if (name && typeof name === 'string' && name.trim()) {
               exerciseMaxW[name] = Math.max(exerciseMaxW[name] || 0, w);
             }
           });

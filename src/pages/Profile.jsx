@@ -228,7 +228,22 @@ export default function Profile() {
     return <div style={{ textAlign: 'center', paddingTop: '100px', color: 'var(--text-secondary)' }}>Loading profile...</div>;
   }
 
-  const consistencyPct = Math.round((stats.attendance30 / 30) * 100);
+  // ── Rest-day aware consistency (mirrors Dashboard logic) ─────────────────
+  const DAY_NAMES_PRF = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const includeRest   = globalProfile.include_rest_days ?? false;
+  const restDaysPrf   = globalProfile.rest_days         ?? [];
+  let denominator30   = 30;
+  if (!includeRest && restDaysPrf.length > 0) {
+    let restCount = 0;
+    const cur = new Date(); cur.setHours(0,0,0,0);
+    for (let i = 0; i < 30; i++) {
+      if (restDaysPrf.includes(DAY_NAMES_PRF[cur.getDay()])) restCount++;
+      cur.setDate(cur.getDate() - 1);
+    }
+    denominator30 = Math.max(30 - restCount, 1);
+  }
+  const consistencyPct = Math.min(Math.round((stats.attendance30 / denominator30) * 100), 100);
+
   const heightNum = parseFloat(form.height_cm);
   const weight    = stats.latestWeight;
   let bmi = 0, bmiStatus = 'No height recorded', bmiColor = 'var(--text-secondary)';

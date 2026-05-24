@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart } from 'lucide-react';
+import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload } from 'lucide-react';
 
 const MainLayout = () => {
   return (
@@ -32,6 +32,10 @@ const MainLayout = () => {
           <PieChart size={22} />
           <span>Intelligence</span>
         </NavLink>
+        <NavLink to="/import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Upload size={22} />
+          <span>AI Import</span>
+        </NavLink>
         <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <User size={22} />
           <span>Identity</span>
@@ -41,31 +45,31 @@ const MainLayout = () => {
       <div className="main-content-wrapper">
         <Outlet />
       </div>
-      
+
       <nav className="mobile-bottom-nav" style={{ background: 'rgba(10, 14, 20, 0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.08)', borderRadius: 0, borderBottom: 'none', borderLeft: 'none', borderRight: 'none' }}>
         <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
-          <Home size={24} />
+          <Home size={22} />
           <span>Home</span>
         </NavLink>
         <NavLink to="/workout" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Dumbbell size={24} />
+          <Dumbbell size={22} />
           <span>Workout</span>
         </NavLink>
         <NavLink to="/history" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <HistoryIcon size={24} />
+          <HistoryIcon size={22} />
           <span>History</span>
         </NavLink>
-        <NavLink to="/bodyweight" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Activity size={24} />
-          <span>Weight</span>
+        <NavLink to="/import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Upload size={22} />
+          <span>Import</span>
         </NavLink>
         <NavLink to="/analytics" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <PieChart size={24} />
+          <PieChart size={22} />
           <span>Intel</span>
         </NavLink>
         <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <User size={24} />
-          <span>Identity</span>
+          <User size={22} />
+          <span>Profile</span>
         </NavLink>
       </nav>
     </div>
