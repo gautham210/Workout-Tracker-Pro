@@ -8,20 +8,21 @@ import {
 } from 'lucide-react';
 
 // ── Example placeholder text ──────────────────────────────────────────────────
-const EXAMPLE_TEXT = `March 3 Push
+const EXAMPLE_TEXT = `Monday Push - March 3
+Flat db
+30kg x12
+32.5kg x10
+35kg x8
 
-Bench
-60x15
-60x15
-65x12
+Wednesday Legs - March 5
+Curls
+40kg x15
+45kg x12
 
-Incline DB
-20x15
-20x15
-
-Lateral Raise
-10x15
-10x12`;
+Friday Pull - March 7
+Latpulldown steelwide
+50kg x12
+55kg x10`;
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 const STEPS = ['paste', 'parsing', 'clarify', 'preview', 'saving', 'done'];
@@ -37,6 +38,78 @@ function confidenceLabel(c) {
   if (c >= 0.9) return 'High';
   if (c >= 0.7) return 'Medium';
   return 'Low';
+}
+
+// ── Boundary Detection Splitter Chunker ───────────────────────────────────────
+function chunkRawWorkoutText(rawText) {
+  const lines = rawText.split('\n');
+  const chunks = [];
+  let currentChunk = [];
+  let currentSplit = 'Custom';
+  let currentDate = null;
+
+  // Regexes to detect headers/dates/splits
+  const splitRegex = /\b(push|pull|legs|upper|lower|full\s*body|chest|back|shoulders|arms|biceps|triceps|cardio)\b/i;
+  const dateRegex = /\b(\d{1,2}[-\/.]\d{1,2}[-\/.]?\d{0,4})|((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:\s+\d{4})?)|(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+  const dayMarkerRegex = /\b(day\s+\d+|workout\s+\d+|session\s+\d+)\b/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (currentChunk.length > 0) {
+        currentChunk.push(lines[i]);
+      }
+      continue;
+    }
+
+    const isSplit = splitRegex.test(line);
+    const isDate = dateRegex.test(line);
+    const isDayMarker = dayMarkerRegex.test(line);
+
+    // If it's a boundary header line and we already have some lines in currentChunk
+    if ((isDate || isSplit || isDayMarker) && currentChunk.filter(l => l.trim()).length > 0) {
+      chunks.push({
+        rawChunk: currentChunk.join('\n').trim(),
+        date: currentDate,
+        split: currentSplit
+      });
+      currentChunk = [];
+    }
+
+    if (isDate || isSplit || isDayMarker) {
+      const dateMatch = line.match(dateRegex);
+      if (dateMatch) {
+        // Parse date label
+        currentDate = dateMatch[0];
+      }
+      
+      const splitMatch = line.match(splitRegex);
+      if (splitMatch) {
+        currentSplit = splitMatch[0].charAt(0).toUpperCase() + splitMatch[0].slice(1).toLowerCase();
+      }
+    }
+
+    currentChunk.push(lines[i]);
+  }
+
+  // Push final chunk
+  if (currentChunk.filter(l => l.trim()).length > 0) {
+    chunks.push({
+      rawChunk: currentChunk.join('\n').trim(),
+      date: currentDate,
+      split: currentSplit
+    });
+  }
+
+  if (chunks.length === 0) {
+    chunks.push({
+      rawChunk: rawText.trim(),
+      date: null,
+      split: 'Custom'
+    });
+  }
+
+  return chunks;
 }
 
 // ── Searchable Autocomplete selector dropdown ─────────────────────────────────
@@ -110,7 +183,7 @@ function ExerciseSearchSelector({ value, onChange, allDbExercises }) {
   );
 }
 
-// ── Tiny inline dropdown for ambiguity resolution ─────────────────────────────
+// ── Tiny dropdown for ambiguity resolution ────────────────────────────────────
 function AmbiguityDropdown({ raw, options, value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -167,26 +240,24 @@ function AmbiguityDropdown({ raw, options, value, onChange }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page Component ───────────────────────────────────────────────────────
 export default function ImportWorkout() {
   const { user } = useAuth();
 
-  const [step,        setStep]        = useState('paste');
-  const [rawText,     setRawText]     = useState('');
-  const [parsed,      setParsed]      = useState(null);   // AI response
-  const [resolutions, setResolutions] = useState({});     // ambiguous raw → chosen name
-  const [parseError,  setParseError]  = useState(null);
-  const [saveError,   setSaveError]   = useState(null);
-  const [savedData,   setSavedData]   = useState(null);   // { vol, sets }
+  const [step,            setStep]            = useState('paste');
+  const [rawText,         setRawText]         = useState('');
+  const [reviewSessions,  setReviewSessions]  = useState([]);   // Sessions parsed list
+  const [resolutions,     setResolutions]     = useState({});   // ambiguous chosen names map
+  const [parseError,      setParseError]      = useState(null);
+  const [saveError,       setSaveError]       = useState(null);
+  const [savedData,       setSavedData]       = useState(null);
 
-  // Editable preview layers
-  const [reviewExercises, setReviewExercises] = useState([]);
-  const [reviewSplit, setReviewSplit] = useState('');
-  const [reviewDate, setReviewDate] = useState('');
   const [showExplanation, setShowExplanation] = useState({});
-  const [allDbExercises, setAllDbExercises] = useState([]);
+  const [allDbExercises,  setAllDbExercises]  = useState([]);
 
-  // Fetch all exercises on mount for searchable remapper autocomplete
+  // Batch process stage trackers
+  const [parsingProgress, setParsingProgress] = useState({ current: 0, total: 0, currentLabel: '' });
+
   useEffect(() => {
     const fetchAll = async () => {
       try {
@@ -197,236 +268,296 @@ export default function ImportWorkout() {
     fetchAll();
   }, []);
 
-  // Check if all ambiguities are resolved
-  const allResolved = (parsed?.ambiguous ?? []).every(a => resolutions[a.raw]);
+  const allResolved = reviewSessions.every((session, sIdx) => 
+    (session.ambiguous ?? []).every(a => resolutions[`${sIdx}-${a.raw}`])
+  );
 
-  // ── Step 1: Parse ───────────────────────────────────────────────────────────
+  // ── Step 1: Sequential Batch Parser ─────────────────────────────────────────
   const handleParse = async () => {
     if (!rawText.trim()) return;
     setStep('parsing');
     setParseError(null);
 
-    // Fetch available exercise names to help AI map
+    const chunks = chunkRawWorkoutText(rawText);
+    setParsingProgress({ current: 0, total: chunks.length, currentLabel: 'Initiating parsing engine...' });
+
     let exerciseNames = [];
     try {
       const { data } = await supabase.from('exercises').select('name').limit(500);
       exerciseNames = data?.map(e => e.name) ?? [];
-    } catch { /* non-critical */ }
+    } catch { /* non-critical fallback */ }
+
+    const parsedSessionsTemp = [];
 
     try {
-      const res = await fetch('/api/parse-workout', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ rawText, exercises: exerciseNames }),
-      });
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const dayLabel = chunk.split !== 'Custom' ? chunk.split : 'Workout';
+        const dateLabel = chunk.date ? ` (${chunk.date})` : '';
 
-      const json = await res.json();
+        setParsingProgress({
+          current: i + 1,
+          total: chunks.length,
+          currentLabel: `Parsing day ${i + 1}/${chunks.length}: ${dayLabel}${dateLabel}...`
+        });
 
-      if (!res.ok) {
-        throw new Error(json.error ?? `Server error ${res.status}`);
+        const res = await fetch('/api/parse-workout', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ rawText: chunk.rawChunk, exercises: exerciseNames }),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          throw new Error(json.error ?? `AI failed to parse day block ${i + 1}`);
+        }
+
+        parsedSessionsTemp.push({
+          date: json.date ?? chunk.date ?? new Date().toLocaleDateString('en-CA'),
+          split: json.split ?? chunk.split ?? 'Custom',
+          exercises: json.exercises?.map(ex => ({
+            ...ex,
+            id: ex.id || `temp-${Date.now()}-${Math.random()}`
+          })) ?? [],
+          ambiguous: json.ambiguous ?? []
+        });
       }
 
-      setParsed(json);
-      setResolutions({});
+      setReviewSessions(parsedSessionsTemp);
 
-      // Initialize review structures
-      const initialExercises = json.exercises?.map((ex, i) => ({
-        ...ex,
-        id: ex.id || `temp-${Date.now()}-${Math.random()}`
-      })) ?? [];
-
-      setReviewExercises(initialExercises);
-      setReviewSplit(json.split ?? 'Custom');
-      setReviewDate(json.date ?? new Date().toLocaleDateString('en-CA'));
-
-      // Require user interaction for disambiguating low-confidence/ambiguous exercises
-      setStep(json.ambiguous?.length > 0 ? 'clarify' : 'preview');
+      const hasAmbiguities = parsedSessionsTemp.some(s => s.ambiguous?.length > 0);
+      setStep(hasAmbiguities ? 'clarify' : 'preview');
     } catch (err) {
-      setParseError(err.message ?? 'Failed to parse workout');
+      setParseError(err.message ?? 'Failure parsing raw workout logs');
       setStep('paste');
     }
   };
 
-  // Apply clarify step choices into our review state
   const handleConfirmClarify = () => {
-    setReviewExercises(prev => prev.map(ex => {
-      const ambiguity = parsed?.ambiguous?.find(a => {
-        return a.options.includes(ex.name) || ex.name.toLowerCase().includes(a.raw.toLowerCase());
+    setReviewSessions(prev => prev.map((session, sIdx) => {
+      const updatedExercises = session.exercises.map(ex => {
+        const ambiguity = session.ambiguous?.find(a => 
+          a.options.includes(ex.name) || ex.name.toLowerCase().includes(a.raw.toLowerCase())
+        );
+        if (ambiguity && resolutions[`${sIdx}-${ambiguity.raw}`]) {
+          return { ...ex, name: resolutions[`${sIdx}-${ambiguity.raw}`], confidence: 1.0 };
+        }
+        return ex;
       });
-      if (ambiguity && resolutions[ambiguity.raw]) {
-        return { ...ex, name: resolutions[ambiguity.raw] };
-      }
-      return ex;
+      return { ...session, exercises: updatedExercises };
     }));
     setStep('preview');
   };
 
-  // ── Step 2: Confirm & Save ──────────────────────────────────────────────────
+  // ── Step 2: Confirm & Aggregate Save ────────────────────────────────────────
   const handleImport = async () => {
-    if (reviewExercises.length === 0) return;
-    
-    // Low confidence block safeguard: check if any low-confidence item is unconfirmed
-    const hasUnconfirmedLowConfidence = reviewExercises.some(ex => {
-      const isLow = (ex.confidence ?? 0) < 0.7;
-      return isLow && !ex.name.trim(); // If low confidence and exercise name is empty
-    });
+    if (reviewSessions.length === 0) return;
+
+    const hasUnconfirmedLowConfidence = reviewSessions.some(session => 
+      session.exercises.some(ex => {
+        const isLow = (ex.confidence ?? 0) < 0.7;
+        return isLow && !ex.name.trim();
+      })
+    );
 
     if (hasUnconfirmedLowConfidence) {
-      setSaveError('Please select and confirm a standardized database name for all low-confidence items.');
+      setSaveError('Please select and confirm a standardized name for all highlighted exercises.');
       return;
     }
 
     setStep('saving');
     setSaveError(null);
 
-    // Resolve date
-    let sessionDate = reviewDate
-      ? new Date(reviewDate + 'T12:00:00').toISOString()
-      : new Date(new Date().toLocaleDateString('en-CA') + 'T12:00:00').toISOString();
-
-    // Insert workout session
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('workout_sessions')
-      .insert({
-        user_id:    user.id,
-        date:       sessionDate,
-        split_type: 'AI Import',
-        split_day:  reviewSplit || 'Unknown',
-        notes:      `Imported via AI — original text length: ${rawText.length} chars`,
-      })
-      .select()
-      .single();
-
-    if (sessionError || !sessionData) {
-      setSaveError(sessionError?.message ?? 'Failed to create session');
-      setStep('preview');
-      return;
-    }
-
     let totalVol  = 0;
     let totalSets = 0;
 
-    for (let i = 0; i < reviewExercises.length; i++) {
-      const ex = reviewExercises[i];
-      if (!ex.name.trim()) continue;
+    try {
+      for (let sIdx = 0; sIdx < reviewSessions.length; sIdx++) {
+        const session = reviewSessions[sIdx];
+        if (session.exercises.length === 0) continue;
 
-      // Try to find exercise in DB by exact name (case-insensitive)
-      const { data: dbEx } = await supabase
-        .from('exercises')
-        .select('id')
-        .ilike('name', ex.name.trim())
-        .limit(1)
-        .single();
+        let sessionDate = session.date
+          ? new Date(session.date + 'T12:00:00').toISOString()
+          : new Date(new Date().toLocaleDateString('en-CA') + 'T12:00:00').toISOString();
 
-      let exerciseId = dbEx?.id ?? null;
-
-      // If not found, insert a custom exercise
-      if (!exerciseId) {
-        const { data: newEx } = await supabase
-          .from('exercises')
-          .insert({ name: ex.name.trim(), muscle_group: 'Other' })
-          .select('id')
+        // Create a separate workout session in the database
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('workout_sessions')
+          .insert({
+            user_id:    user.id,
+            date:       sessionDate,
+            split_type: 'AI Import',
+            split_day:  session.split || 'Custom',
+            notes:      `AI chunked import.`,
+          })
+          .select()
           .single();
-        exerciseId = newEx?.id ?? null;
-      }
 
-      if (!exerciseId) continue;
+        if (sessionError || !sessionData) {
+          throw new Error(sessionError?.message ?? `Failed to create session for Day ${sIdx + 1}`);
+        }
 
-      const { data: seData } = await supabase
-        .from('session_exercises')
-        .insert({ session_id: sessionData.id, exercise_id: exerciseId, order_index: i })
-        .select()
-        .single();
+        for (let i = 0; i < session.exercises.length; i++) {
+          const ex = session.exercises[i];
+          if (!ex.name.trim()) continue;
 
-      if (seData && ex.sets?.length > 0) {
-        const validSets = ex.sets.filter(s => s.reps > 0);
-        if (validSets.length > 0) {
-          await supabase.from('sets').insert(
-            validSets.map((s, idx) => ({
-              session_exercise_id: seData.id,
-              set_number:          idx + 1,
-              weight_kg:           s.weight_kg ?? 0,
-              reps:                s.reps       ?? 0,
-            }))
-          );
-          validSets.forEach(s => {
-            totalVol  += (s.weight_kg ?? 0) * (s.reps ?? 0);
-            totalSets += 1;
-          });
+          // Find existing standardized exercise name
+          const { data: dbEx } = await supabase
+            .from('exercises')
+            .select('id')
+            .ilike('name', ex.name.trim())
+            .limit(1)
+            .single();
+
+          let exerciseId = dbEx?.id ?? null;
+
+          if (!exerciseId) {
+            // Register missing standard exercise dynamically
+            const { data: newEx } = await supabase
+              .from('exercises')
+              .insert({ name: ex.name.trim(), muscle_group: 'Other' })
+              .select('id')
+              .single();
+            exerciseId = newEx?.id ?? null;
+          }
+
+          if (!exerciseId) continue;
+
+          const { data: seData } = await supabase
+            .from('session_exercises')
+            .insert({ session_id: sessionData.id, exercise_id: exerciseId, order_index: i })
+            .select()
+            .single();
+
+          if (seData && ex.sets?.length > 0) {
+            const validSets = ex.sets.filter(s => s.reps > 0);
+            if (validSets.length > 0) {
+              await supabase.from('sets').insert(
+                validSets.map((s, idx) => ({
+                  session_exercise_id: seData.id,
+                  set_number:          idx + 1,
+                  weight_kg:           s.weight_kg ?? 0,
+                  reps:                s.reps       ?? 0,
+                }))
+              );
+              validSets.forEach(s => {
+                totalVol  += (s.weight_kg ?? 0) * (s.reps ?? 0);
+                totalSets += 1;
+              });
+            }
+          }
         }
       }
+
+      setSavedData({ vol: totalVol, sets: totalSets });
+      setStep('done');
+    } catch (err) {
+      setSaveError(err.message ?? 'Import encountered database issues.');
+      setStep('preview');
     }
-
-    setSavedData({ vol: totalVol, sets: totalSets });
-    setStep('done');
   };
 
-  // ── Preview review screen callbacks ─────────────────────────────────────────
-  const updateExerciseName = (exIdx, newName) => {
-    setReviewExercises(prev => prev.map((ex, i) => i === exIdx ? { ...ex, name: newName } : ex));
-  };
-
-  const removeExercise = (exIdx) => {
-    setReviewExercises(prev => prev.filter((_, i) => i !== exIdx));
-  };
-
-  const updateSetField = (exIdx, setIdx, field, value) => {
-    setReviewExercises(prev => prev.map((ex, i) => {
-      if (i !== exIdx) return ex;
+  // ── Preview Modification Handlers ──────────────────────────────────────────
+  const updateExerciseName = (sessionIdx, exIdx, newName) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
       return {
-        ...ex,
-        sets: ex.sets.map((s, j) => j === setIdx ? { ...s, [field]: value === '' ? 0 : parseFloat(value) } : s)
+        ...s,
+        exercises: s.exercises.map((ex, j) => j === exIdx ? { ...ex, name: newName } : ex)
       };
     }));
   };
 
-  const removeSet = (exIdx, setIdx) => {
-    setReviewExercises(prev => prev.map((ex, i) => {
-      if (i !== exIdx) return ex;
+  const removeExercise = (sessionIdx, exIdx) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
+      return { ...s, exercises: s.exercises.filter((_, j) => j !== exIdx) };
+    }));
+  };
+
+  const updateSetField = (sessionIdx, exIdx, setIdx, field, value) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
       return {
-        ...ex,
-        sets: ex.sets.filter((_, j) => j !== setIdx)
+        ...s,
+        exercises: s.exercises.map((ex, j) => {
+          if (j !== exIdx) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.map((set, k) => k === setIdx ? { ...set, [field]: value === '' ? 0 : parseFloat(value) } : set)
+          };
+        })
       };
     }));
   };
 
-  const addSet = (exIdx) => {
-    setReviewExercises(prev => prev.map((ex, i) => {
-      if (i !== exIdx) return ex;
-      const lastSet = ex.sets[ex.sets.length - 1];
+  const removeSet = (sessionIdx, exIdx, setIdx) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
       return {
-        ...ex,
-        sets: [...ex.sets, { weight_kg: lastSet?.weight_kg ?? 0, reps: lastSet?.reps ?? 10 }]
+        ...s,
+        exercises: s.exercises.map((ex, j) => {
+          if (j !== exIdx) return ex;
+          return { ...ex, sets: ex.sets.filter((_, k) => k !== setIdx) };
+        })
       };
     }));
   };
 
-  const addExercise = () => {
-    setReviewExercises(prev => [
-      ...prev,
-      {
-        name: '',
-        confidence: 1.0,
-        sets: [{ weight_kg: 0, reps: 10 }]
-      }
-    ]);
+  const addSet = (sessionIdx, exIdx) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
+      return {
+        ...s,
+        exercises: s.exercises.map((ex, j) => {
+          if (j !== exIdx) return ex;
+          const lastSet = ex.sets[ex.sets.length - 1];
+          return {
+            ...ex,
+            sets: [...ex.sets, { weight_kg: lastSet?.weight_kg ?? 0, reps: lastSet?.reps ?? 10 }]
+          };
+        })
+      };
+    }));
+  };
+
+  const addExercise = (sessionIdx) => {
+    setReviewSessions(prev => prev.map((s, i) => {
+      if (i !== sessionIdx) return s;
+      return {
+        ...s,
+        exercises: [
+          ...s.exercises,
+          { name: '', confidence: 1.0, sets: [{ weight_kg: 0, reps: 10 }] }
+        ]
+      };
+    }));
+  };
+
+  const updateSessionDate = (sessionIdx, newDate) => {
+    setReviewSessions(prev => prev.map((s, i) => i === sessionIdx ? { ...s, date: newDate } : s));
+  };
+
+  const updateSessionSplit = (sessionIdx, newSplit) => {
+    setReviewSessions(prev => prev.map((s, i) => i === sessionIdx ? { ...s, split: newSplit } : s));
+  };
+
+  const deleteSession = (sessionIdx) => {
+    setReviewSessions(prev => prev.filter((_, i) => i !== sessionIdx));
   };
 
   const handleReset = () => {
     setStep('paste');
     setRawText('');
-    setParsed(null);
+    setReviewSessions([]);
     setResolutions({});
     setParseError(null);
     setSaveError(null);
     setSavedData(null);
-    setReviewExercises([]);
-    setReviewSplit('');
-    setReviewDate('');
     setShowExplanation({});
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="page-enter" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '120px' }}>
       <style>{`
@@ -453,12 +584,9 @@ export default function ImportWorkout() {
         }
         .import-textarea:focus { border-color: rgba(0,122,255,0.5); background: rgba(0,0,0,0.4); }
         .import-textarea::placeholder { color: rgba(255,255,255,0.2); font-family: inherit; }
-        .ex-preview-card { border-radius: 16px; overflow: hidden; margin-bottom: 14px; }
-        .confidence-bar { height: 3px; border-radius: 100px; background: rgba(255,255,255,0.08); margin-top: 8px; overflow: hidden; }
-        .confidence-fill { height: 100%; border-radius: 100px; transition: width 0.6s ease; }
       `}</style>
 
-      {/* ── Header ── */}
+      {/* ── Title Header ── */}
       <div style={{ marginTop: '16px', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
           <div style={{ background: 'rgba(0,122,255,0.15)', padding: '10px', borderRadius: '14px' }}>
@@ -467,13 +595,13 @@ export default function ImportWorkout() {
           <h1 className="title" style={{ margin: 0, fontSize: '32px' }}>AI Workout Import</h1>
         </div>
         <p style={{ color: 'var(--text-secondary)', fontSize: '15px', margin: 0, fontWeight: '500' }}>
-          Paste any messy workout log. AI parses, maps, and imports it automatically.
+          Paste messy training logs. The sequential multi-day AI parser categorizes them automatically.
         </p>
       </div>
 
       {/* ── Step Indicator ── */}
       <div className="step-indicator">
-        {['paste', 'parsing', 'clarify', 'preview', 'saving', 'done'].map((s, i) => {
+        {STEPS.map((s) => {
           const stepIdx = STEPS.indexOf(step);
           const thisIdx = STEPS.indexOf(s);
           return (
@@ -494,7 +622,7 @@ export default function ImportWorkout() {
           <div className="glass card" style={{ padding: '24px', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <label style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Raw Workout Log
+                Workout log pastebox
               </label>
               <button
                 onClick={() => setRawText(EXAMPLE_TEXT)}
@@ -505,13 +633,13 @@ export default function ImportWorkout() {
             </div>
             <textarea
               className="import-textarea"
-              placeholder={`Paste your workout log here...\n\nExample:\nMarch 3 Push\n\nBench\n60x15\n60x15\n\nIncline DB\n20x15`}
+              placeholder={`Paste raw workout entries here...\n\nExample:\nMarch 3 Push\nFlat db\n30kg x12\n35kg x8`}
               value={rawText}
               onChange={e => setRawText(e.target.value)}
               spellCheck={false}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-              <span style={{ fontSize: '12px', color: rawText.length > 10000 ? 'var(--error-color)' : 'var(--text-secondary)', fontWeight: '600' }}>
+              <span style={{ fontSize: '12px', color: rawText.length > 12000 ? 'var(--error-color)' : 'var(--text-secondary)', fontWeight: '600' }}>
                 {rawText.length.toLocaleString()} / 12,000 chars
               </span>
               {rawText && (
@@ -545,25 +673,6 @@ export default function ImportWorkout() {
             Parse with AI
             <ArrowRight size={18} />
           </button>
-
-          {/* Tips */}
-          <div className="glass card" style={{ padding: '20px', marginTop: '24px', margin: '24px 0 0' }}>
-            <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-secondary)', marginBottom: '14px' }}>Supported formats</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {[
-                ['60x15', 'weight × reps (60kg × 15)'],
-                ['x15 or just 15', 'reps only (bodyweight)'],
-                ['March 3 Push', 'date + split name'],
-                ['Incline DB Press', 'full or partial exercise names'],
-                ['Curl (ambiguous)', 'AI asks for clarification'],
-              ].map(([code, desc]) => (
-                <div key={code} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <code style={{ background: 'rgba(255,255,255,0.07)', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', color: 'var(--accent-hover)', fontWeight: '700', flexShrink: 0 }}>{code}</code>
-                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '500' }}>{desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
@@ -573,47 +682,63 @@ export default function ImportWorkout() {
           <div className="glass card parsing-pulse" style={{ display: 'inline-flex', padding: '28px', borderRadius: '50%', marginBottom: '32px' }}>
             <Sparkles size={48} color="var(--accent-hover)" />
           </div>
-          <h2 style={{ fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: '12px' }}>Analyzing your workout…</h2>
+          <h2 style={{ fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: '12px' }}>Analyzing training data…</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '15px', fontWeight: '500' }}>
-            AI is parsing exercises, weights, and mapping muscle groups.
+            {parsingProgress.currentLabel}
           </p>
+          {parsingProgress.total > 1 && (
+            <div style={{ maxWidth: '300px', margin: '20px auto 0', background: 'rgba(255,255,255,0.06)', borderRadius: '10px', height: '6px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  background: 'var(--accent-color)', 
+                  width: `${(parsingProgress.current / parsingProgress.total) * 100}%`,
+                  transition: 'width 0.4s ease'
+                }} 
+              />
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '24px' }}>
             <Loader2 className="animate-spin" size={20} color="var(--text-secondary)" />
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600' }}>This takes 2–5 seconds</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600' }}>Processing chunk sequentially</span>
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════ STEP: CLARIFY */}
-      {step === 'clarify' && parsed && (
+      {step === 'clarify' && reviewSessions.length > 0 && (
         <div className="animate-fade-in">
           <div style={{ marginBottom: '24px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Clarify Ambiguous Exercises</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>
-              {parsed.ambiguous.length} exercise{parsed.ambiguous.length !== 1 ? 's need' : ' needs'} clarification before we can import.
+              Standardize mapped database categories before previewing:
             </p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
-            {parsed.ambiguous.map(amb => (
-              <div key={amb.raw} className="glass card" style={{ padding: '20px', margin: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                  <div style={{ background: 'rgba(255,159,10,0.12)', padding: '7px', borderRadius: '10px' }}>
-                    <AlertTriangle size={16} color="#FF9F0A" />
+            {reviewSessions.map((session, sIdx) => 
+              (session.ambiguous ?? []).map((amb, aIdx) => (
+                <div key={`${sIdx}-${aIdx}`} className="glass card" style={{ padding: '20px', margin: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                    <div style={{ background: 'rgba(255,159,10,0.12)', padding: '7px', borderRadius: '10px' }}>
+                      <AlertTriangle size={16} color="#FF9F0A" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '800', fontSize: '16px', color: 'white' }}>"{amb.raw}"</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginTop: '2px' }}>
+                        Day {sIdx + 1} ({session.split}) — Could not be mapped with high confidence
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontWeight: '800', fontSize: '16px', color: 'white' }}>"{amb.raw}"</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', marginTop: '2px' }}>Could not be identified with high confidence</div>
-                  </div>
+                  <AmbiguityDropdown
+                    raw={amb.raw}
+                    options={amb.options ?? []}
+                    value={resolutions[`${sIdx}-${amb.raw}`] ?? ''}
+                    onChange={val => setResolutions(prev => ({ ...prev, [`${sIdx}-${amb.raw}`]: val }))}
+                  />
                 </div>
-                <AmbiguityDropdown
-                  raw={amb.raw}
-                  options={amb.options ?? []}
-                  value={resolutions[amb.raw] ?? ''}
-                  onChange={val => setResolutions(prev => ({ ...prev, [amb.raw]: val }))}
-                />
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -637,13 +762,13 @@ export default function ImportWorkout() {
       )}
 
       {/* ═══════════════════════════════════════════════════ STEP: PREVIEW */}
-      {step === 'preview' && parsed && (
+      {step === 'preview' && reviewSessions.length > 0 && (
         <div className="animate-fade-in">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
             <div>
               <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Review & Edit Import</h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500', margin: 0 }}>
-                Correct database mappings, adjust set logs, or add exercises before concluding.
+                Adjust dates, sets, names, or remove split segments cleanly.
               </p>
             </div>
             <button
@@ -654,175 +779,211 @@ export default function ImportWorkout() {
             </button>
           </div>
 
-          {/* Session meta */}
-          <div className="glass card" style={{ padding: '20px', marginBottom: '20px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Calendar size={16} color="var(--accent-hover)" />
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Session Date</div>
-                <input
-                  type="date"
-                  value={reviewDate}
-                  max={new Date().toLocaleDateString('en-CA')}
-                  onChange={e => setReviewDate(e.target.value)}
-                  style={{
-                    background: 'transparent', border: 'none', color: 'white',
-                    fontWeight: '800', fontSize: '14px', outline: 'none', cursor: 'pointer'
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Dumbbell size={16} color="#30D158" />
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Routine Split</div>
-                <input
-                  type="text"
-                  value={reviewSplit}
-                  onChange={e => setReviewSplit(e.target.value)}
-                  placeholder="e.g. Push"
-                  style={{
-                    background: 'transparent', border: 'none', color: 'white',
-                    fontWeight: '800', fontSize: '14px', outline: 'none', width: '100px'
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Exercise preview cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
-            {reviewExercises.map((ex, idx) => {
-              const isLowConfidence = (ex.confidence ?? 0) < 0.7;
-              const showEx = showExplanation[idx] || isLowConfidence;
-              const hasSets = ex.sets && ex.sets.length > 0;
-
-              return (
-                <div key={idx} className="glass card animate-fade-in" style={{ padding: '0', overflow: 'hidden', margin: 0, border: isLowConfidence ? '1px dashed rgba(255,69,58,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
-                  {/* Card Header */}
-                  <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1, marginRight: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '800', color: 'rgba(255,255,255,0.4)' }}>#{idx + 1}</span>
-                        <input
-                          type="text"
-                          value={ex.name}
-                          onChange={e => updateExerciseName(idx, e.target.value)}
-                          placeholder="Movement Name"
-                          style={{
-                            background: 'transparent', border: 'none', color: '#fff',
-                            fontSize: '17px', fontWeight: '800', outline: 'none',
-                            width: '100%', padding: '2px 0'
-                          }}
-                        />
-                      </div>
-                      <div
-                        onClick={() => setShowExplanation(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', userSelect: 'none' }}
-                      >
-                        <div style={{ width: '80px', height: '3px', borderRadius: '100px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                          <div
-                            style={{ height: '100%', borderRadius: '100px', width: `${(ex.confidence ?? 0) * 100}%`, background: confidenceColor(ex.confidence ?? 0) }}
-                          />
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: '700', color: confidenceColor(ex.confidence ?? 0), textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {confidenceLabel(ex.confidence ?? 0)} Match ▾
-                        </span>
-                      </div>
+          {/* Workout Sessions Cards list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', marginBottom: '24px' }}>
+            {reviewSessions.map((session, sIdx) => (
+              <div 
+                key={sIdx} 
+                className="glass card animate-fade-in" 
+                style={{ 
+                  padding: '24px', 
+                  margin: 0, 
+                  border: '1px solid rgba(255,255,255,0.08)', 
+                  position: 'relative'
+                }}
+              >
+                {/* Session Card Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ background: 'rgba(0,122,255,0.15)', padding: '8px', borderRadius: '10px' }}>
+                      <Calendar size={18} color="var(--accent-hover)" />
                     </div>
-                    <button
-                      onClick={() => removeExercise(idx)}
-                      style={{ background: 'none', border: 'none', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', borderRadius: '8px', transition: 'background 0.2s' }}
-                      onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,69,58,0.1)'; e.currentTarget.style.color = 'var(--error-color)'; }}
-                      onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                    >
-                      <X size={18} />
-                    </button>
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: 'white' }}>Workout Day {sIdx + 1}</span>
                   </div>
+                  <button
+                    onClick={() => deleteSession(sIdx)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--error-color)', cursor: 'pointer', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <X size={14} /> Remove Day
+                  </button>
+                </div>
 
-                  {/* Searchable Remapping Explanations Drawer */}
-                  {showEx && (
-                    <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.01)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <Zap size={13} color={isLowConfidence ? '#FF9F0A' : 'var(--accent-hover)'} />
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: isLowConfidence ? '#FF9F0A' : 'rgba(255,255,255,0.9)' }}>
-                          {isLowConfidence ? 'Action Required: Confirm Movement' : 'Inference Match Details'}
-                        </span>
-                      </div>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '12px', lineHeight: '1.5', margin: '0 0 10px', fontWeight: '600' }}>
-                        {isLowConfidence
-                          ? `Parsed term "${ex.name || 'empty'}" needs verification. Select a standardized movement name:`
-                          : `Standardized match from log text. Use the search input below if you wish to override the mapping:`}
-                      </p>
-                      <ExerciseSearchSelector
-                        value={ex.name}
-                        onChange={val => updateExerciseName(idx, val)}
-                        allDbExercises={allDbExercises}
-                      />
-                    </div>
-                  )}
-
-                  {/* Card Body — Set entries */}
-                  <div style={{ padding: '16px 20px' }}>
-                    {hasSets ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {ex.sets.map((s, si) => (
-                          <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-secondary)', width: '28px' }}>S{si + 1}</span>
-                            
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '4px 12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                              <input
-                                type="number"
-                                placeholder="0"
-                                value={s.weight_kg === 0 ? '' : s.weight_kg}
-                                onChange={e => updateSetField(idx, si, 'weight_kg', e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '15px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
-                                inputMode="decimal"
-                              />
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', marginLeft: '4px', marginRight: '12px' }}>kg</span>
-                              <span style={{ color: 'var(--accent-hover)', fontWeight: '800', fontSize: '14px' }}>×</span>
-                              <input
-                                type="number"
-                                placeholder="0"
-                                value={s.reps === 0 ? '' : s.reps}
-                                onChange={e => updateSetField(idx, si, 'reps', e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '15px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
-                                inputMode="numeric"
-                              />
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', marginLeft: '4px' }}>reps</span>
-                            </div>
-
-                            <button
-                              onClick={() => removeSet(idx, si)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '4px' }}
-                            >
-                              <X size={15} color="var(--error-color)" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '8px' }}>No sets added to this movement.</div>
-                    )}
-                    <button
-                      onClick={() => addSet(idx)}
-                      style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', color: 'var(--text-secondary)', fontWeight: '700', cursor: 'pointer', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                    >
-                      + Add Set
-                    </button>
+                {/* Session details */}
+                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Date:</span>
+                    <input
+                      type="date"
+                      value={session.date}
+                      max={new Date().toLocaleDateString('en-CA')}
+                      onChange={e => updateSessionDate(sIdx, e.target.value)}
+                      style={{
+                        background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', color: 'white',
+                        fontWeight: '700', fontSize: '13px', padding: '6px 12px', borderRadius: '8px', outline: 'none', cursor: 'pointer'
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Split:</span>
+                    <input
+                      type="text"
+                      value={session.split}
+                      onChange={e => updateSessionSplit(sIdx, e.target.value)}
+                      placeholder="e.g. Push"
+                      style={{
+                        background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', color: 'white',
+                        fontWeight: '700', fontSize: '13px', padding: '6px 12px', borderRadius: '8px', outline: 'none', width: '100px'
+                      }}
+                    />
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          <button
-            onClick={addExercise}
-            className="btn-secondary"
-            style={{ width: '100%', border: '1px solid rgba(0,122,255,0.3)', background: 'rgba(0,122,255,0.05)', padding: '14px', fontSize: '14px', display: 'flex', justifyContent: 'center', color: 'white', fontWeight: '800', borderRadius: '16px', marginBottom: '24px', gap: '8px' }}
-          >
-            <Dumbbell size={16} color="var(--accent-hover)" /> + Add Missing Exercise
-          </button>
+                {/* Exercises Preview Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {session.exercises.map((ex, exIdx) => {
+                    const isLowConfidence = (ex.confidence ?? 0) < 0.7;
+                    const showEx = showExplanation[`${sIdx}-${exIdx}`] || isLowConfidence;
+                    const hasSets = ex.sets && ex.sets.length > 0;
+
+                    return (
+                      <div 
+                        key={exIdx} 
+                        className="glass card animate-fade-in" 
+                        style={{ 
+                          padding: '0', 
+                          overflow: 'hidden', 
+                          margin: 0, 
+                          background: 'rgba(255,255,255,0.01)',
+                          border: isLowConfidence ? '1px dashed rgba(255,69,58,0.3)' : '1px solid rgba(255,255,255,0.04)' 
+                        }}
+                      >
+                        {/* Exercise Card Header */}
+                        <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ flex: 1, marginRight: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.3)' }}>#{exIdx + 1}</span>
+                              <input
+                                type="text"
+                                value={ex.name}
+                                onChange={e => updateExerciseName(sIdx, exIdx, e.target.value)}
+                                placeholder="Movement Name"
+                                style={{
+                                  background: 'transparent', border: 'none', color: '#fff',
+                                  fontSize: '15px', fontWeight: '800', outline: 'none',
+                                  width: '100%', padding: '2px 0'
+                                }}
+                              />
+                            </div>
+                            <div
+                              onClick={() => setShowExplanation(prev => ({ ...prev, [`${sIdx}-${exIdx}`]: !prev[`${sIdx}-${exIdx}`] }))}
+                              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '4px', userSelect: 'none' }}
+                            >
+                              <div style={{ width: '60px', height: '3px', borderRadius: '100px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                                <div
+                                  style={{ height: '100%', borderRadius: '100px', width: `${(ex.confidence ?? 0) * 100}%`, background: confidenceColor(ex.confidence ?? 0) }}
+                                />
+                              </div>
+                              <span style={{ fontSize: '10px', fontWeight: '700', color: confidenceColor(ex.confidence ?? 0), textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {confidenceLabel(ex.confidence ?? 0)} Match ▾
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeExercise(sIdx, exIdx)}
+                            style={{ background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', borderRadius: '8px', transition: 'background 0.2s' }}
+                            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,69,58,0.1)'; e.currentTarget.style.color = 'var(--error-color)'; }}
+                            onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        {/* Remapping Explanations Drawer */}
+                        {showEx && (
+                          <div style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                              <Zap size={12} color={isLowConfidence ? '#FF9F0A' : 'var(--accent-hover)'} />
+                              <span style={{ fontSize: '11px', fontWeight: '800', color: isLowConfidence ? '#FF9F0A' : 'rgba(255,255,255,0.9)' }}>
+                                {isLowConfidence ? 'Action Required: Confirm Movement' : 'Inference Match Details'}
+                              </span>
+                            </div>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: '1.4', margin: '0 0 8px', fontWeight: '500' }}>
+                              {isLowConfidence
+                                ? `Parsed term "${ex.name || 'empty'}" needs verification. Select a standardized movement name:`
+                                : `Standardized match from log text. Use the search input below if you wish to override the mapping:`}
+                            </p>
+                            <ExerciseSearchSelector
+                              value={ex.name}
+                              onChange={val => updateExerciseName(sIdx, exIdx, val)}
+                              allDbExercises={allDbExercises}
+                            />
+                          </div>
+                        )}
+
+                        {/* Exercise Sets */}
+                        <div style={{ padding: '12px 16px' }}>
+                          {hasSets ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {ex.sets.map((s, si) => (
+                                <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', width: '24px' }}>S{si + 1}</span>
+                                  
+                                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: '8px', padding: '3px 10px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                    <input
+                                      type="number"
+                                      placeholder="0"
+                                      value={s.weight_kg === 0 ? '' : s.weight_kg}
+                                      onChange={e => updateSetField(sIdx, exIdx, si, 'weight_kg', e.target.value)}
+                                      style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '13px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
+                                      inputMode="decimal"
+                                    />
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '700', marginLeft: '3px', marginRight: '8px' }}>kg</span>
+                                    <span style={{ color: 'var(--accent-hover)', fontWeight: '800', fontSize: '12px' }}>×</span>
+                                    <input
+                                      type="number"
+                                      placeholder="0"
+                                      value={s.reps === 0 ? '' : s.reps}
+                                      onChange={e => updateSetField(sIdx, exIdx, si, 'reps', e.target.value)}
+                                      style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '13px', fontWeight: '700', outline: 'none', width: '100%', textAlign: 'right' }}
+                                      inputMode="numeric"
+                                    />
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '700', marginLeft: '3px' }}>reps</span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => removeSet(sIdx, exIdx, si)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '3px' }}
+                                  >
+                                    <X size={14} color="var(--error-color)" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '6px' }}>No sets added.</div>
+                          )}
+                          <button
+                            onClick={() => addSet(sIdx, exIdx)}
+                            style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '8px', color: 'var(--text-secondary)', fontWeight: '700', cursor: 'pointer', marginTop: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                          >
+                            + Add Set
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => addExercise(sIdx)}
+                  className="btn-secondary"
+                  style={{ width: '100%', border: '1px dashed rgba(0,122,255,0.2)', background: 'rgba(0,122,255,0.03)', padding: '10px', fontSize: '13px', display: 'flex', justifyContent: 'center', color: 'white', fontWeight: '700', borderRadius: '12px', marginTop: '16px', gap: '6px' }}
+                >
+                  <Dumbbell size={14} color="var(--accent-hover)" /> + Add Missing Exercise
+                </button>
+              </div>
+            ))}
+          </div>
 
           {saveError && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 18px', background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: '14px', marginBottom: '16px' }}>
@@ -834,11 +995,11 @@ export default function ImportWorkout() {
           <button
             className="btn-primary"
             onClick={handleImport}
-            disabled={reviewExercises.length === 0}
+            disabled={reviewSessions.length === 0}
             style={{ width: '100%', padding: '18px', fontSize: '16px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '8px' }}
           >
             <Upload size={20} />
-            Import {reviewExercises.length} Exercise{reviewExercises.length !== 1 ? 's' : ''}
+            Import {reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0)} Exercise{reviewSessions.reduce((acc, s) => acc + s.exercises.length, 0) !== 1 ? 's' : ''}
           </button>
         </div>
       )}
@@ -850,7 +1011,7 @@ export default function ImportWorkout() {
             <Loader2 size={48} color="var(--accent-hover)" className="animate-spin" />
           </div>
           <h2 style={{ fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: '12px' }}>Saving to your account…</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '15px', fontWeight: '500' }}>Inserting exercises and sets into the database.</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '15px', fontWeight: '500' }}>Inserting sessions, exercises, and sets into the database sequentially.</p>
         </div>
       )}
 
@@ -862,7 +1023,7 @@ export default function ImportWorkout() {
           </div>
           <h2 style={{ fontSize: '36px', fontWeight: '800', letterSpacing: '-1px', marginBottom: '12px' }}>Import Complete!</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '16px', fontWeight: '500', marginBottom: '40px' }}>
-            Your workout has been saved and is now in your history.
+            All parsed workout segments have been synchronized to your workout history database.
           </p>
 
           <div className="glass card" style={{ display: 'inline-flex', gap: '40px', padding: '24px 40px', marginBottom: '40px', textAlign: 'center' }}>
