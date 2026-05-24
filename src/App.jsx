@@ -8,6 +8,7 @@ import Bodyweight from './pages/Bodyweight';
 import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
 import ImportWorkout from './pages/ImportWorkout';
+import AICoach from './pages/AICoach';
 import MainLayout from './components/MainLayout';
 
 const ProtectedRoute = ({ children }) => {
@@ -29,6 +30,7 @@ function App() {
           <Route path="bodyweight" element={<Bodyweight />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="import" element={<ImportWorkout />} />
+          <Route path="ai-coach" element={<AICoach />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>

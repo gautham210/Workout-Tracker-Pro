@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload } from 'lucide-react';
+import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NetworkToast from './NetworkToast';
 
@@ -41,6 +41,10 @@ const MainLayout = () => {
           <Upload size={22} />
           <span>AI Import</span>
         </NavLink>
+        <NavLink to="/ai-coach" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Sparkles size={22} />
+          <span>AI Coach</span>
+        </NavLink>
         <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <User size={22} />
           <span>Identity</span>
@@ -67,6 +71,10 @@ const MainLayout = () => {
         <NavLink to="/import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <Upload size={22} />
           <span>Import</span>
+        </NavLink>
+        <NavLink to="/ai-coach" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Sparkles size={22} />
+          <span>Coach</span>
         </NavLink>
         <NavLink to="/analytics" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <PieChart size={22} />

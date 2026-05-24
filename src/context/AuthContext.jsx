@@ -1,15 +1,19 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { supabase, resetNetworkCooldown } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext({});
 
-// Events that mean "the user has genuinely changed" — require a profile check
-const USER_CHANGE_EVENTS = new Set(['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY']);
+// Cache the initial getSession call globally so StrictMode double-mounting
+// awaits the exact same single promise, preventing lock contention and redundant calls.
+let initialSessionPromise = null;
+function getInitialSession() {
+  if (!initialSessionPromise) {
+    initialSessionPromise = supabase.auth.getSession();
+  }
+  return initialSessionPromise;
+}
 
-// Events that are safe to skip profile re-fetch (token silently refreshed, same user)
-const SILENT_EVENTS = new Set(['TOKEN_REFRESHED', 'INITIAL_SESSION']);
-
-// How long (ms) a cached profile is considered fresh — skip re-fetch within this window
+// How long (ms) a cached profile is considered fresh
 const PROFILE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export const AuthProvider = ({ children }) => {
@@ -18,20 +22,22 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [networkError, setNetworkError] = useState(null);
 
-  // ── Refs to guard against races and stale closures ────────────────────────
-  const mountedRef          = useRef(true);  // unmount guard
-  const fetchingRef         = useRef(false); // deduplicate in-flight fetch
-  const lastUserIdRef       = useRef(null);  // skip fetch if same user
-  const lastFetchedAtRef    = useRef(0);     // timestamp of last successful fetch
-  const lastProcessedTokenRef = useRef(null); // memoize last processed access token
+  // Refs to guard against races and stale closures
+  const mountedRef          = useRef(true);
+  const fetchingRef         = useRef(false);
+  const lastUserIdRef       = useRef(null);
+  const lastFetchedAtRef    = useRef(0);
+  const lastProcessedTokenRef = useRef(null);
 
-  // Called once on unmount to stop all state updates
+  // Set up mount lifetime tracking
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  // ── Core profile fetcher ──────────────────────────────────────────────────
+  // ── Core Profile Fetcher ──────────────────────────────────────────────────
   const fetchProfile = useCallback(async (sessionUser, { force = false } = {}) => {
     if (!mountedRef.current) return;
 
@@ -45,9 +51,8 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Skip re-fetch if it's the same user AND cache is still warm AND not forced
-    const sameUser   = lastUserIdRef.current === sessionUser.id;
-    const cacheWarm  = Date.now() - lastFetchedAtRef.current < PROFILE_CACHE_TTL;
+    const sameUser  = lastUserIdRef.current === sessionUser.id;
+    const cacheWarm = Date.now() - lastFetchedAtRef.current < PROFILE_CACHE_TTL;
     if (sameUser && cacheWarm && !force) {
       if (mountedRef.current) {
         setUser(sessionUser);
@@ -56,13 +61,10 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Deduplicate concurrent calls
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
-    // Offline guard — don't retry when we know we're offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      console.warn('[AUTH] Device is offline — skipping profile fetch');
       if (mountedRef.current) {
         setUser(sessionUser);
         setLoading(false);
@@ -79,9 +81,9 @@ export const AuthProvider = ({ children }) => {
         .eq('id', sessionUser.id)
         .single();
 
-      if (!mountedRef.current) { fetchingRef.current = false; return; }
+      if (!mountedRef.current) return;
 
-      // PGRST116 = row not found — insert recovery profile
+      // Profile does not exist yet -> construct placeholder recovery profile
       if (error?.code === 'PGRST116') {
         const { error: insertError } = await supabase
           .from('profiles')
@@ -92,7 +94,7 @@ export const AuthProvider = ({ children }) => {
             rest_days:         ['Sunday'],
           });
 
-        if (!mountedRef.current) { fetchingRef.current = false; return; }
+        if (!mountedRef.current) return;
 
         if (!insertError) {
           const { data: fresh } = await supabase
@@ -110,37 +112,23 @@ export const AuthProvider = ({ children }) => {
             lastFetchedAtRef.current = Date.now();
           }
         } else {
-          console.error('[AUTH] Profile insert failed:', insertError.message);
+          console.error('[AUTH] Profile auto-creation failed:', insertError.message);
           if (mountedRef.current) {
             setUser(sessionUser);
             setProfile(null);
             setLoading(false);
           }
         }
-        fetchingRef.current = false;
-        return;
-      }
-
-      // Network / DNS error
-      if (error?.message?.includes('fetch') || error?.message?.includes('network') || error?.message?.includes('Failed')) {
-        console.error('[AUTH] Network error fetching profile:', error.message);
-        if (mountedRef.current) {
-          setUser(sessionUser);
-          setLoading(false);
-          setNetworkError('network');
-        }
-        fetchingRef.current = false;
         return;
       }
 
       if (error) {
-        console.error('[AUTH] Profile error:', error.code, error.message);
+        console.error('[AUTH] Profile database error:', error.message);
         if (mountedRef.current) {
           setUser(sessionUser);
           setProfile(null);
           setLoading(false);
         }
-        fetchingRef.current = false;
         return;
       }
 
@@ -153,7 +141,7 @@ export const AuthProvider = ({ children }) => {
         lastFetchedAtRef.current = Date.now();
       }
     } catch (err) {
-      console.error('[AUTH] Fetch threw:', err.message);
+      console.error('[AUTH] Profile fetch threw:', err.message);
       if (mountedRef.current) {
         setUser(prev => prev ?? sessionUser);
         setLoading(false);
@@ -164,112 +152,83 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // ── StrictMode-Safe Auth State Listener ──────────────────────────────────
+  // ── Unified Session Handler ───────────────────────────────────────────────
+  const handleSession = useCallback((session, source) => {
+    if (!mountedRef.current) return;
+
+    const currentToken = session?.access_token ?? null;
+    const currentUser = session?.user ?? null;
+
+    // Check if the actual user identity is identical
+    const isSameUser = lastUserIdRef.current === currentUser?.id;
+
+    // ── STRICT DE-DUPLICATION ────────────────────────────────────────────────
+    // If the token is identical, return immediately to ignore duplicate callbacks.
+    if (lastProcessedTokenRef.current === currentToken && isSameUser) {
+      return;
+    }
+
+    lastProcessedTokenRef.current = currentToken;
+
+    // If the user identity is identical and we already loaded their profile,
+    // only update the user object if metadata or email changed. Skip re-renders!
+    if (isSameUser && user && profile) {
+      if (user.email !== currentUser?.email || JSON.stringify(user.user_metadata) !== JSON.stringify(currentUser?.user_metadata)) {
+        setUser(currentUser);
+      }
+      return;
+    }
+
+    // Process fresh user / signed out states
+    if (!currentUser) {
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+      setNetworkError(null);
+      lastUserIdRef.current = null;
+      lastFetchedAtRef.current = 0;
+      return;
+    }
+
+    fetchProfile(currentUser);
+  }, [user, profile, fetchProfile]);
+
+  // ── StrictMode-Safe Unified Subscription lifecycle ────────────────────────
   useEffect(() => {
     let active = true;
 
-    // 1. Initial session check
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    // 1. Resolve initial session check exactly once across mounts
+    getInitialSession().then(({ data: { session }, error }) => {
       if (!active) return;
       if (error) {
-        console.error('[AUTH] getSession error:', error.message);
+        console.error('[AUTH] Initial getSession failed:', error.message);
         setLoading(false);
         return;
       }
-
-      if (session?.user) {
-        lastProcessedTokenRef.current = session.access_token;
-        fetchProfile(session.user);
-      } else {
-        setLoading(false);
-      }
+      handleSession(session, 'initial_getSession');
     });
 
-    // 2. Subscribe to auth state changes
+    // 2. Subscribe to standard auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!active || !mountedRef.current) return;
-
-      const currentToken = session?.access_token ?? null;
-      const currentUser = session?.user ?? null;
-
-      // ── Deduplicate auth listener triggers ────────────────────────────────
-      // If the session token and user ID are identical to the last processed ones,
-      // skip completely to prevent token refresh storms and redundant fetches.
-      if (lastProcessedTokenRef.current === currentToken && lastUserIdRef.current === currentUser?.id) {
-        return;
-      }
-
-      console.log(`[AUTH] State Change -> Event: ${event}, User: ${currentUser?.id ?? 'none'}`);
-      lastProcessedTokenRef.current = currentToken;
-
-      // SIGNED_OUT — clear auth context silently
-      if (event === 'SIGNED_OUT' || !currentUser) {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-        setNetworkError(null);
-        lastUserIdRef.current    = null;
-        lastFetchedAtRef.current = 0;
-        fetchingRef.current      = false;
-        return;
-      }
-
-      // Silent token refresh
-      if (SILENT_EVENTS.has(event)) {
-        if (!lastUserIdRef.current || lastUserIdRef.current !== currentUser.id) {
-          fetchProfile(currentUser);
-        } else {
-          setUser(currentUser); // Update user info without profile re-fetch or loading state flicker
-        }
-        return;
-      }
-
-      // SIGNED_IN / USER_UPDATED
-      if (USER_CHANGE_EVENTS.has(event)) {
-        // Only force profile re-fetch if the user actually changed or we do not have a profile yet
-        const forceFetch = lastUserIdRef.current !== currentUser.id || !profile;
-        fetchProfile(currentUser, { force: forceFetch });
-      }
+      if (!active) return;
+      handleSession(session, `onAuthStateChange:${event}`);
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile, profile]);
-
-  // ── Network recovery and Tab Focus triggers ───────────────────────────────
-  // Automatically clear custom fetch cooldowns when restoring network or returning to page
-  useEffect(() => {
-    const handleReconnectOrFocus = () => {
-      console.log('[AUTH] App focused/reconnected. Cleaning cooldowns.');
-      resetNetworkCooldown();
-
-      if (networkError && user) {
-        setNetworkError(null);
-        fetchingRef.current      = false;
-        lastFetchedAtRef.current = 0;
-        fetchProfile(user, { force: true });
-      }
-    };
-
-    window.addEventListener('online', handleReconnectOrFocus);
-    window.addEventListener('focus', handleReconnectOrFocus);
-
-    return () => {
-      window.removeEventListener('online', handleReconnectOrFocus);
-      window.removeEventListener('focus', handleReconnectOrFocus);
-    };
-  }, [networkError, user, fetchProfile]);
+  }, [handleSession]);
 
   // ── Manual Profile synchronizer ──────────────────────────────────────────
+  // Queries profiles table directly using existing user.id to sync data
+  // without calling supabase.auth.getSession() or triggering GoTrue locks.
   const refreshProfile = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
+    if (!user) return;
     fetchingRef.current      = false;
     lastFetchedAtRef.current = 0;
-    await fetchProfile(session.user, { force: true });
-  }, [fetchProfile]);
+    await fetchProfile(user, { force: true });
+  }, [user, fetchProfile]);
 
   return (
     <AuthContext.Provider value={{ user, profile, refreshProfile, loading, networkError }}>

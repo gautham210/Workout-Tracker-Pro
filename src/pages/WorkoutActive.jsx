@@ -701,6 +701,11 @@ export default function WorkoutActive() {
                       Last: {lastWeights[item.exercise.id].weight}kg × {lastWeights[item.exercise.id].reps}
                     </div>
                   )}
+                  {item.suggestedPerformance && (
+                    <div style={{ fontSize:'11px', color:'var(--accent-hover)', fontWeight:'700', marginTop:'3px' }}>
+                      Suggested based on previous performance: {item.suggestedPerformance}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => removeExercise(exIdx)}
