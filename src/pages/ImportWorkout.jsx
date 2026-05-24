@@ -108,6 +108,70 @@ function formatParsedDate(dateStr, splitVal, index) {
   return `${splitVal ? `${splitVal} — ` : ''}${dateStr}`;
 }
 
+// ── Smart Exercise Candidate Validation ──────────────────────────────────────
+function isLikelyExerciseName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const clean = name.trim().toLowerCase();
+  
+  if (clean.length < 3) return false;
+  
+  // 1. Blacklist exact words or patterns
+  const blacklist = new Set([
+    'mid', 'close', 'normal', 'standing', 'seated', 'flat', 'incline', 'decline',
+    'legs', 'push', 'pull', 'arms', 'chest', 'back', 'shoulders', 'biceps', 'triceps',
+    'day', 'workout', 'session', 'date', 'split', 'week', 'warmup', 'warm-up',
+    'heavy', 'light', 'max', 'failure', 'drop', 'dropset', 'set', 'sets', 'reps',
+    'cardio', 'weight', 'weights', 'kg', 'lbs', 'lbs.', 'amrap'
+  ]);
+  
+  if (blacklist.has(clean)) return false;
+  
+  // 2. Reject pure numeric or pure weight/rep structures (e.g. "10kg 10kg 15kg", "20 incline", "10 10 12")
+  const numericWeightNoiseRegex = /^[0-9\s.,kglbsx*+\/-]+$/i;
+  if (numericWeightNoiseRegex.test(clean)) return false;
+  
+  // Check if it starts with a number followed only by a few noise words (e.g., "20 incline", "30 flat")
+  const numThenModifierRegex = /^\d+\s*(?:incline|decline|flat|seated|standing|heavy|light|kg|lbs|lbs.)?$/i;
+  if (numThenModifierRegex.test(clean)) return false;
+
+  // 3. Blacklist of patterns (e.g. "pull day 5", "day 3")
+  if (/\b(?:day|workout|session|split|week)\s*\d+/i.test(clean)) return false;
+  if (/\d+\s*(?:day|workout|session|split|week)/i.test(clean)) return false;
+
+  // 4. Token list analysis
+  const tokens = clean.split(/[\s_\-\/]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  
+  // If it's a single word (single token), it MUST be a recognized exercise keyword or derivative.
+  const exerciseKeywords = new Set([
+    'press', 'bench', 'fly', 'flys', 'curl', 'curls', 'squat', 'squats', 'deadlift', 'deadlifts',
+    'row', 'rows', 'pulldown', 'pulldowns', 'raise', 'raises', 'extension', 'extensions', 'pushdown', 'pushdowns',
+    'dip', 'dips', 'pullup', 'pullups', 'pushup', 'pushups', 'chinup', 'chinups', 'lunge', 'lunges',
+    'presses', 'shrug', 'shrugs', 'crunch', 'crunches', 'plank', 'planks', 'run', 'cardio', 'walk', 'cycle',
+    'crossover', 'covers', 'facepull', 'facepulls', 'pec', 'deck', 'cable', 'barbell', 'dumbbell', 'db', 'bb',
+    'lateral', 'front', 'rear', 'overhead', 'skullcrusher', 'skullcrushers', 'clean', 'jerk', 'snatch'
+  ]);
+  
+  if (tokens.length === 1) {
+    const t = tokens[0];
+    const isKnownKeyword = exerciseKeywords.has(t) || 
+                           (t.endsWith('s') && exerciseKeywords.has(t.slice(0, -1))) ||
+                           (t.endsWith('es') && exerciseKeywords.has(t.slice(0, -2)));
+    if (!isKnownKeyword) {
+      return false;
+    }
+  }
+  
+  // 5. Ensure it contains at least one non-noise token
+  const noiseAdjectives = new Set([
+    'max', 'incline', 'no', 'weight', 'heavy', 'light', 'set', 'sets', 'rep', 'reps', 'kg', 'lbs'
+  ]);
+  const nonNoiseTokens = tokens.filter(t => !noiseAdjectives.has(t) && !blacklist.has(t));
+  if (nonNoiseTokens.length === 0) return false;
+
+  return true;
+}
+
 // ── Boundary Detection Splitter Chunker ───────────────────────────────────────
 function chunkRawWorkoutText(rawText) {
   const lines = rawText.split('\n');
@@ -140,6 +204,9 @@ function chunkRawWorkoutText(rawText) {
         split: currentSplit
       });
       currentChunk = [];
+      // STRICT SESSION ISOLATION: reset context for the next chunk segment
+      currentDate = null;
+      currentSplit = 'Custom';
     }
 
     if (isDate || isSplit || isDayMarker) {
@@ -676,6 +743,8 @@ export default function ImportWorkout() {
         const nameLabel = ex.name.trim() || `Unnamed #${exIdx + 1}`;
         if (!ex.name.trim()) {
           warnings.push(`${dayLabel}, Exercise #${exIdx + 1}: Exercise name field is empty.`);
+        } else if (!isLikelyExerciseName(ex.name)) {
+          warnings.push(`${dayLabel}, "${nameLabel}": This name contains numbers or formatting noise.`);
         }
         if (!ex.sets || ex.sets.length === 0) {
           warnings.push(`${dayLabel}, "${nameLabel}": Contains zero set logs.`);

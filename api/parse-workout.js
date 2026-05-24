@@ -81,7 +81,7 @@ function normalizeWorkoutText(raw) {
   // Normalize reps notation: "x 3", "X3" to " x3"
   cleaned = cleaned.replace(/\s*[xX]\s*(\d+)\b/g, ' x$1');
   
-  // Clean up "Seated Calf - 30 kg x3" formats, convert "30kg x3" or "30 kg x3"
+  // Clean up spacing
   cleaned = cleaned.replace(/[ \t]+/g, ' ');
   
   // Normalize duplicate newlines
@@ -93,9 +93,91 @@ function normalizeWorkoutText(raw) {
   return cleaned;
 }
 
+// ── Hard Noise Filtering Guard ──────────────────────────────────────────────
+function isLikelyExerciseName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const clean = name.trim().toLowerCase();
+  
+  if (clean.length < 3) return false;
+  
+  // 1. Blacklist exact words or patterns
+  const blacklist = new Set([
+    'mid', 'close', 'normal', 'standing', 'seated', 'flat', 'incline', 'decline',
+    'legs', 'push', 'pull', 'arms', 'chest', 'back', 'shoulders', 'biceps', 'triceps',
+    'day', 'workout', 'session', 'date', 'split', 'week', 'warmup', 'warm-up',
+    'heavy', 'light', 'max', 'failure', 'drop', 'dropset', 'set', 'sets', 'reps',
+    'cardio', 'weight', 'weights', 'kg', 'lbs', 'lbs.', 'amrap'
+  ]);
+  
+  if (blacklist.has(clean)) return false;
+  
+  // 2. Reject pure numeric or pure weight/rep structures (e.g. "10kg 10kg 15kg", "20 incline", "10 10 12")
+  const numericWeightNoiseRegex = /^[0-9\s.,kglbsx*+\/-]+$/i;
+  if (numericWeightNoiseRegex.test(clean)) return false;
+  
+  // Check if it starts with a number followed only by a few noise words (e.g., "20 incline", "30 flat")
+  const numThenModifierRegex = /^\d+\s*(?:incline|decline|flat|seated|standing|heavy|light|kg|lbs|lbs.)?$/i;
+  if (numThenModifierRegex.test(clean)) return false;
+
+  // 3. Blacklist of patterns (e.g. "pull day 5", "day 3")
+  if (/\b(?:day|workout|session|split|week)\s*\d+/i.test(clean)) return false;
+  if (/\d+\s*(?:day|workout|session|split|week)/i.test(clean)) return false;
+
+  // 4. Token list analysis
+  const tokens = clean.split(/[\s_\-\/]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  
+  // If it's a single word (single token), it MUST be a recognized exercise keyword or derivative.
+  const exerciseKeywords = new Set([
+    'press', 'bench', 'fly', 'flys', 'curl', 'curls', 'squat', 'squats', 'deadlift', 'deadlifts',
+    'row', 'rows', 'pulldown', 'pulldowns', 'raise', 'raises', 'extension', 'extensions', 'pushdown', 'pushdowns',
+    'dip', 'dips', 'pullup', 'pullups', 'pushup', 'pushups', 'chinup', 'chinups', 'lunge', 'lunges',
+    'presses', 'shrug', 'shrugs', 'crunch', 'crunches', 'plank', 'planks', 'run', 'cardio', 'walk', 'cycle',
+    'crossover', 'covers', 'facepull', 'facepulls', 'pec', 'deck', 'cable', 'barbell', 'dumbbell', 'db', 'bb',
+    'lateral', 'front', 'rear', 'overhead', 'skullcrusher', 'skullcrushers', 'clean', 'jerk', 'snatch'
+  ]);
+  
+  if (tokens.length === 1) {
+    const t = tokens[0];
+    const isKnownKeyword = exerciseKeywords.has(t) || 
+                           (t.endsWith('s') && exerciseKeywords.has(t.slice(0, -1))) ||
+                           (t.endsWith('es') && exerciseKeywords.has(t.slice(0, -2)));
+    if (!isKnownKeyword) {
+      return false;
+    }
+  }
+  
+  // 5. Ensure it contains at least one non-noise token
+  const noiseAdjectives = new Set([
+    'max', 'incline', 'no', 'weight', 'heavy', 'light', 'set', 'sets', 'rep', 'reps', 'kg', 'lbs'
+  ]);
+  const nonNoiseTokens = tokens.filter(t => !noiseAdjectives.has(t) && !blacklist.has(t));
+  if (nonNoiseTokens.length === 0) return false;
+
+  return true;
+}
+
+// ── Grouped Weight Progression Helper ─────────────────────────────────────────
+function parseNumericList(line) {
+  if (!line || typeof line !== 'string') return null;
+  // Replace typical unit text with spaces
+  const clean = line.replace(/(?:kg|lbs|kgs|reps|x)\b/ig, ' ').trim();
+  // Split by spaces, commas, or slashes
+  const tokens = clean.split(/[\s,\/]+/).filter(Boolean);
+  if (tokens.length < 2) return null; // Must contain at least two entries to constitute a list
+  
+  const nums = [];
+  for (const t of tokens) {
+    const n = parseFloat(t);
+    if (isNaN(n)) return null;
+    nums.push(n);
+  }
+  return nums;
+}
+
 // ── Fuzzy Exercise Alias Resolution Mapping ──────────────────────────────────
 function applyFuzzyExerciseResolution(exercises, split) {
-  const normalizedSplit = (split || '').toLowerCase();
+  const normalizedSplit = (split || '').toLowerCase().trim();
   
   return exercises.map(ex => {
     let name = ex.name || '';
@@ -108,22 +190,58 @@ function applyFuzzyExerciseResolution(exercises, split) {
     } else if (cleanName === 'latpulldown steelwide' || cleanName === 'lat pulldown steelwide') {
       name = 'Wide Grip Lat Pulldown';
       confidence = 1.0;
+    } else if (cleanName === 'dumbell overhead' || cleanName === 'dumbbell overhead') {
+      name = 'Overhead Tricep Extension';
+      confidence = 1.0;
     } else if (cleanName === 'curls' || cleanName === 'curl') {
       if (normalizedSplit.includes('legs') || normalizedSplit.includes('lower')) {
         name = 'Leg Curl';
         confidence = 1.0;
+      } else if (normalizedSplit.includes('pull') || normalizedSplit.includes('arms') || normalizedSplit.includes('biceps')) {
+        name = 'Bicep Curl';
+        confidence = 1.0;
+      } else if (normalizedSplit.includes('push')) {
+        name = 'Bicep Curl';
+        confidence = 0.5; 
       } else {
         name = 'Bicep Curl';
-        confidence = 0.9;
+        confidence = 0.85;
       }
     } else if (cleanName === 'fly' || cleanName === 'flys') {
       if (normalizedSplit.includes('push') || normalizedSplit.includes('chest')) {
         name = 'Chest Fly';
         confidence = 1.0;
+      } else if (normalizedSplit.includes('pull') || normalizedSplit.includes('back') || normalizedSplit.includes('shoulders')) {
+        name = 'Reverse Fly';
+        confidence = 1.0;
+      } else {
+        name = 'Chest Fly';
+        confidence = 0.8;
       }
-    } else if (cleanName === 'dumbell overhead' || cleanName === 'dumbbell overhead') {
-      name = 'Overhead Tricep Extension';
-      confidence = 1.0;
+    } else if (cleanName === 'extension' || cleanName === 'extensions') {
+      if (normalizedSplit.includes('legs') || normalizedSplit.includes('lower')) {
+        name = 'Leg Extension';
+        confidence = 1.0;
+      } else if (normalizedSplit.includes('push') || normalizedSplit.includes('arms') || normalizedSplit.includes('triceps')) {
+        name = 'Overhead Tricep Extension';
+        confidence = 1.0;
+      } else {
+        name = 'Leg Extension';
+        confidence = 0.8;
+      }
+    } else if (cleanName === 'row' || cleanName === 'rows') {
+      if (normalizedSplit.includes('pull') || normalizedSplit.includes('back')) {
+        name = 'Seated Cable Row';
+        confidence = 1.0;
+      } else {
+        name = 'Seated Cable Row';
+        confidence = 0.8;
+      }
+    } else if (cleanName === 'standing') {
+      if (normalizedSplit.includes('legs') || normalizedSplit.includes('lower')) {
+        name = 'Standing Calf Raise';
+        confidence = 1.0;
+      }
     }
     
     return {
@@ -163,15 +281,16 @@ function fallbackRegexParser(rawText) {
   }
 
   let currentExercise = null;
-  const setPattern = /^(\d+(?:\.\d+)?)\s*(?:kg)?\s*[xX*]\s*(\d+)/i;
+  const setPattern = /^[+-]?\s*(\d+(?:\.\d+)?)\s*(?:kg|lbs|kgs)?\s*[xX*]\s*(\d+)/i;
   const repsOnlyPattern = /^(?:x|reps)?\s*(\d+)\b/i;
+  const singleNumPattern = /^[+-]?\s*(\d+(?:\.\d+)?)\s*(kg|lbs|kgs)?$/i;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line === result.date || line === result.split) continue;
 
+    // 1. Check if it matches setPattern: e.g. "60x15", "+10kg x8", "3 x 12"
     const setMatch = line.match(setPattern);
-    const repsMatch = line.match(repsOnlyPattern);
-    
     if (setMatch) {
       if (currentExercise) {
         currentExercise.sets.push({
@@ -179,16 +298,69 @@ function fallbackRegexParser(rawText) {
           reps: parseInt(setMatch[2])
         });
       }
-    } else if (/^\d+$/.test(line) || (repsMatch && !isNaN(parseInt(line)) && currentExercise)) {
-      if (currentExercise) {
+      continue;
+    }
+
+    // 2. Check if it matches repsOnlyPattern with "x" prefix: e.g. "x12", "x10"
+    if (/^[xX]\s*(\d+)$/.test(line)) {
+      const match = line.match(/^[xX]\s*(\d+)$/);
+      if (currentExercise && match) {
         currentExercise.sets.push({
           weight_kg: 0,
-          reps: parseInt(line)
+          reps: parseInt(match[1])
         });
       }
-    } else {
-      if (/\b(day|workout|session|date)\b/i.test(line)) continue;
+      continue;
+    }
+
+    // 3. Check for Grouped Numeric Lists: e.g. "20 20 25" followed by "12 10 8"
+    const currentList = parseNumericList(line);
+    if (currentList && currentExercise) {
+      let nextLine = lines[i + 1] ? lines[i + 1].trim() : '';
+      const nextList = nextLine ? parseNumericList(nextLine) : null;
       
+      if (nextList && nextList.length === currentList.length) {
+        for (let k = 0; k < currentList.length; k++) {
+          currentExercise.sets.push({
+            weight_kg: currentList[k],
+            reps: nextList[k]
+          });
+        }
+        i++; // skip next line
+        continue;
+      } else {
+        for (const num of currentList) {
+          currentExercise.sets.push({
+            weight_kg: num,
+            reps: 10 // default reps
+          });
+        }
+        continue;
+      }
+    }
+
+    // 4. Check for Single Numbers under an active exercise: e.g. "10kg", "12"
+    const singleNumMatch = line.match(singleNumPattern);
+    if (singleNumMatch && currentExercise) {
+      const val = parseFloat(singleNumMatch[1]);
+      const hasUnit = !!singleNumMatch[2];
+      
+      if (hasUnit || line.startsWith('+') || line.startsWith('-')) {
+        currentExercise.sets.push({
+          weight_kg: val,
+          reps: 10 // default reps
+        });
+      } else {
+        currentExercise.sets.push({
+          weight_kg: 0,
+          reps: parseInt(singleNumMatch[1])
+        });
+      }
+      continue;
+    }
+
+    // 5. Check if it's a valid exercise name candidate
+    if (isLikelyExerciseName(line)) {
       currentExercise = {
         name: line,
         confidence: 0.5,
@@ -299,6 +471,14 @@ export default async function handler(req, res) {
     if (!parsed) {
       console.warn('[AI_IMPORT] AI failed to return valid JSON. Resolving via local structural regex parser fallback.');
       parsed = fallbackRegexParser(normalizedRaw);
+    }
+
+    // Guardrail Sanitization: Filter out garbage exercises and ambiguities
+    if (parsed.exercises && Array.isArray(parsed.exercises)) {
+      parsed.exercises = parsed.exercises.filter(ex => isLikelyExerciseName(ex.name));
+    }
+    if (parsed.ambiguous && Array.isArray(parsed.ambiguous)) {
+      parsed.ambiguous = parsed.ambiguous.filter(amb => isLikelyExerciseName(amb.raw));
     }
 
     // 3. Fuzzy alias resolution mapping
