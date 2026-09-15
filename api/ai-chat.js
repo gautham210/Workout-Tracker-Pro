@@ -49,6 +49,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid payload: "messages" array is required' });
   }
 
+  const MAX_PAYLOAD_SIZE = 100 * 1024; // 100KB
+  if (JSON.stringify(messages).length > MAX_PAYLOAD_SIZE) {
+    return res.status(413).json({ error: 'Payload too large. Chat history exceeds limit.' });
+  }
+
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
     console.error('[AI_CHAT] NVIDIA_API_KEY is not configured on the server.');

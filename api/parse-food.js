@@ -37,6 +37,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid or missing image payload (must be a base64 data URI)' });
   }
 
+  const MAX_PAYLOAD_SIZE = 5 * 1024 * 1024; // 5MB limit
+  if (imageUri.length > MAX_PAYLOAD_SIZE) {
+    return res.status(413).json({ error: 'Payload too large. Image must be under 5MB.' });
+  }
+
   const apiKey = process.env.NVIDIA_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'Vision API key is not configured on the server.' });

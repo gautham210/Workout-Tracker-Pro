@@ -11,7 +11,7 @@ import { getDb } from './db';
 export async function queueSyncOperation(tableName: string, operation: string, payload: any) {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO sync_outbox (id, table_name, operation, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO sync_outbox (id, table_name, operation, payload, created_at, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
     [payload.id, tableName, operation, JSON.stringify(payload), new Date().toISOString()]
   );
   
@@ -84,8 +84,8 @@ export async function processOutbox() {
           updateStatus('Sync failed / retrying');
           break;
         } else {
-          // Success! Mark as synced (or delete from outbox)
-          await db.runAsync(`UPDATE sync_outbox SET status = 'synced' WHERE id = ?`, [op.id]);
+          // Success! Delete from outbox to prevent infinite growth
+          await db.runAsync(`DELETE FROM sync_outbox WHERE id = ?`, [op.id]);
         }
       } catch (e) {
         console.error(`[SYNC] Corrupt payload for ${op.id}`, e);

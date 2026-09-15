@@ -448,7 +448,7 @@ export default async function handler(req, res) {
 
     while (attempt <= 2) {
       try {
-        const completion = await client.chat.completions.create({
+        const apiCallPromise = client.chat.completions.create({
           model:       'meta/llama-3.1-8b-instruct',
           temperature: 0.0,
           max_tokens:  1536,
@@ -457,6 +457,12 @@ export default async function handler(req, res) {
             { role: 'user',   content: userContent },
           ],
         });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Vision API request timed out')), 15000)
+        );
+
+        const completion = await Promise.race([apiCallPromise, timeoutPromise]);
 
         const rawContent = completion.choices[0]?.message?.content ?? '';
 

@@ -24,7 +24,9 @@ export default function CoachScreen() {
 
     const context = await buildAICoachContext();
 
-    const response = await sendChatMessage(newMessages, context, false);
+    // Only send the last 10 messages to save bandwidth and prevent oversized payloads
+    const messagesToSent = newMessages.slice(-10);
+    const response = await sendChatMessage(messagesToSent, context, false);
     
     setMessages([...newMessages, { role: 'assistant', content: response.text }]);
     setLoading(false);

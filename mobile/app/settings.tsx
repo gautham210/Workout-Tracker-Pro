@@ -102,6 +102,19 @@ export default function SettingsScreen() {
             <Text style={styles.settingValue}>Kilograms (kg)</Text>
           </View>
         </GlassCard>
+
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={async () => {
+            const { clearLocalDb } = await import('../lib/db');
+            const { supabase } = await import('../lib/supabase');
+            await clearLocalDb();
+            await supabase.auth.signOut();
+            router.replace('/(auth)/sign-in');
+          }}
+        >
+          <Text style={styles.logoutText}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -145,4 +158,6 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   settingText: { color: '#fff', fontSize: 16 },
   settingValue: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  logoutButton: { marginTop: 24, padding: 16, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)', alignItems: 'center' },
+  logoutText: { color: '#ef4444', fontSize: 16, fontWeight: '600' },
 });

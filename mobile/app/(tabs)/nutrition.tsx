@@ -58,7 +58,8 @@ export default function NutritionScreen() {
       }
     } else {
       try {
-        const response = await sendChatMessage(newMessages, context, true);
+        const messagesToSent = newMessages.slice(-10);
+        const response = await sendChatMessage(messagesToSent, context, true);
         setMessages(prev => [...prev, { role: 'assistant', content: response.text }]);
       } catch (err: any) {
         setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
