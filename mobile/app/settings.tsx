@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAr
 import { useRouter } from 'expo-router';
 import GlassCard from '../components/GlassCard';
 import { UploadCloud, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { BACKEND_URL } from '../lib/api';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function SettingsScreen() {
     setSuccess(false);
 
     try {
-      const response = await fetch('http://10.0.2.2:5173/api/parse-workout', {
+      const response = await fetch(`${BACKEND_URL}/api/parse-workout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: logText })

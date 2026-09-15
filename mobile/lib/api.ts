@@ -1,6 +1,6 @@
 const HOST_IP = '10.0.2.2'; // Standard Android Emulator host bridge IP
 const PORT = '5173';
-const BACKEND_URL = `http://${HOST_IP}:${PORT}`;
+export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || (__DEV__ ? `http://${HOST_IP}:${PORT}` : 'https://workout-tracker-pro.vercel.app');
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';

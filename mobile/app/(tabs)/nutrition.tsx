@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import GlassCard from '../../components/GlassCard';
 import { Send, Utensils, User, Camera, X } from 'lucide-react-native';
-import { sendChatMessage, ChatMessage } from '../../lib/api';
+import { sendChatMessage, ChatMessage, BACKEND_URL } from '../../lib/api';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function NutritionScreen() {
@@ -37,7 +37,7 @@ export default function NutritionScreen() {
     if (selectedImage) {
       try {
         // Attempt to call a vision endpoint that would process the base64 image
-        const response = await fetch('http://10.0.2.2:5173/api/parse-food', {
+        const response = await fetch(`${BACKEND_URL}/api/parse-food`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageUri: selectedImage })
