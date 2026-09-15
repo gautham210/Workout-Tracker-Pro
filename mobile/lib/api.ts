@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 const HOST_IP = '10.0.2.2'; // Standard Android Emulator host bridge IP
 const PORT = '5173';
 export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || (__DEV__ ? `http://${HOST_IP}:${PORT}` : 'https://workout-tracker-pro.vercel.app');
@@ -13,6 +15,15 @@ export interface SuggestionResponse {
   suggestedWorkout?: any;
 }
 
+const getAuthHeaders = async () => {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+};
+
 /**
  * Dispatches conversational prompt questions to NVIDIA Llama-3.1-8b endpoint or local development server.
  */
@@ -22,9 +33,10 @@ export async function sendChatMessage(
   isNutritionist: boolean = false
 ): Promise<SuggestionResponse> {
   try {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${BACKEND_URL}/api/ai-chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ messages, context, isNutritionist }),
     });
 
@@ -55,5 +67,49 @@ export async function sendChatMessage(
   } catch (err: any) {
     console.error('[API] AI request failed:', err);
     throw new Error(err.message || 'Failed to communicate with AI Coach endpoint.');
+  }
+}
+
+export async function parseWorkoutFromText(rawText: string, exercises: any[]): Promise<any> {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${BACKEND_URL}/api/parse-workout`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ rawText, exercises }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data;
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server responded with ${response.status}`);
+    }
+  } catch (err: any) {
+    console.error('[API] Parse request failed:', err);
+    throw new Error(err.message || 'Failed to parse workout data.');
+  }
+}
+
+export async function scanFoodImage(base64Image: string): Promise<any> {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${BACKEND_URL}/api/parse-food`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ imageUri: base64Image }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data;
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server responded with ${response.status}`);
+    }
+  } catch (err: any) {
+    console.error('[API] Food scan request failed:', err);
+    throw new Error(err.message || 'Failed to analyze food image.');
   }
 }

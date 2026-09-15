@@ -28,36 +28,51 @@ export default function WorkoutTimer({ activeExerciseName, triggerCount, onSkip 
 
   const timerRef = useRef<any>(null);
 
+  const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
+
   // Sync with AsyncStorage on trigger
   useEffect(() => {
     if (triggerCount === 0) return;
 
-    const initiateTimer = async () => {
-      const targetSec = getRestDurationForExercise(activeExerciseName);
-      const endTimestamp = Date.now() + targetSec * 1000;
-
-      await (AsyncStorage as any).multiSet([
-        ['wtp_timer_active', 'true'],
-        ['wtp_timer_duration', String(targetSec)],
-        ['wtp_timer_end', String(endTimestamp)],
-        ['wtp_timer_paused', 'false'],
-        ['wtp_timer_paused_remaining', '0'],
-      ]);
-
-      setDuration(targetSec);
-      setTimeLeft(targetSec);
-      setIsPaused(false);
-      setIsActive(true);
-    };
-
-    initiateTimer();
+    const targetSec = getRestDurationForExercise(activeExerciseName);
+    const endTs = Date.now() + targetSec * 1000;
+    
+    setDuration(targetSec);
+    setEndTimestamp(endTs);
+    setIsActive(true);
+    
   }, [triggerCount, activeExerciseName]);
+
+  useEffect(() => {
+    if (!isActive || !endTimestamp) return;
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.round((endTimestamp - now) / 1000));
+      setTimeLeft(remaining);
+      
+      if (remaining <= 0) {
+        setIsActive(false);
+        Vibration.vibrate(500);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isActive, endTimestamp]);
 
   if (!isActive) return null;
 
   return (
-    <View style={{ padding: 16, backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 12, alignItems: 'center' }}>
-      <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>Rest Timer: {timeLeft}s</Text>
+    <View style={{ padding: 16, backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 12, alignItems: 'center', marginBottom: 16, width: 200 }}>
+      <GlassCard strong style={{ width: '100%', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Timer color="#0ea5e9" size={20} />
+          <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</Text>
+        </View>
+        <TouchableOpacity onPress={() => setIsActive(false)} style={{ marginTop: 8, padding: 8 }}>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Skip</Text>
+        </TouchableOpacity>
+      </GlassCard>
     </View>
   );
 }

@@ -2,30 +2,73 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import GlassCard from '../../components/GlassCard';
-import { Activity, Flame, ChevronRight, Zap } from 'lucide-react-native';
+import { Activity, Flame, ChevronRight, Zap, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react-native';
 import { useAuth } from '../../lib/AuthContext';
 import { generateInsights, Insight } from '../../lib/insights';
+import { getDb, clearLocalDb } from '../../lib/db';
+import { Alert } from 'react-native';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [nextWorkout, setNextWorkout] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [unfinishedSessionId, setUnfinishedSessionId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string>('Synced');
+
+  useEffect(() => {
+    let unsubscribe: () => void;
+    import('../../lib/sync').then(({ onSyncStatusChange, getSyncStatus }) => {
+      setSyncStatus(getSyncStatus());
+      unsubscribe = onSyncStatusChange((s) => setSyncStatus(s));
+    });
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const checkUnfinishedSession = async () => {
+    try {
+      const db = await getDb();
+      const row = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM workout_sessions WHERE is_finished = 0 ORDER BY date DESC LIMIT 1`
+      );
+      setUnfinishedSessionId(row ? row.id : null);
+    } catch (e) {
+      console.log('No SQLite DB yet or error checking sessions', e);
+    }
+  };
 
   const loadData = async () => {
     setRefreshing(true);
+    await checkUnfinishedSession();
     if (!user) {
       setRefreshing(false);
       return;
     }
-    const data = await generateInsights(user.id);
+    const { insights: data, nextWorkout: nextW } = await generateInsights(user.id);
     setInsights(data);
+    setNextWorkout(nextW);
     setRefreshing(false);
   };
 
   useEffect(() => {
     loadData();
   }, [user]);
+
+  const discardSession = async () => {
+    Alert.alert('Discard', 'Are you sure you want to discard this workout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: async () => {
+        const db = await getDb();
+        if (unfinishedSessionId) {
+          await db.runAsync(`DELETE FROM workout_sessions WHERE id = ?`, [unfinishedSessionId]);
+          setUnfinishedSessionId(null);
+        }
+      }}
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -35,13 +78,71 @@ export default function DashboardScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Ready to crush it,</Text>
-            <Text style={styles.name}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
+            <Text style={styles.greeting}>Ready to train,</Text>
+            <Text style={styles.title}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-            <Text style={{ fontSize: 24 }}>⚙️</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+              {syncStatus === 'Synced' ? (
+                <CheckCircle2 color="#10b981" size={16} />
+              ) : syncStatus === 'Syncing' ? (
+                <RefreshCw color="#0ea5e9" size={16} />
+              ) : syncStatus === 'Saved locally' ? (
+                <Cloud color="#f59e0b" size={16} />
+              ) : (
+                <CloudOff color="#ef4444" size={16} />
+              )}
+              <Text style={{ color: 'white', fontSize: 12, marginLeft: 6 }}>{syncStatus}</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
+              <Text style={{ fontSize: 24 }}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Crash Recovery Prompt */}
+        {unfinishedSessionId && (
+          <GlassCard style={[styles.insightCard, { borderColor: '#ef4444', borderWidth: 1 }]}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>
+              Active Workout Detected
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', marginBottom: 16 }}>
+              It looks like you didn't finish your last workout session.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: '#0ea5e9', padding: 12, borderRadius: 8, alignItems: 'center' }}
+                onPress={() => router.push({ pathname: '/active-workout', params: { resumeSessionId: unfinishedSessionId } })}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>Resume</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 12, borderRadius: 8, alignItems: 'center' }}
+                onPress={discardSession}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>Discard</Text>
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+        )}
+
+        {/* Next Workout */}
+        {nextWorkout && (
+          <GlassCard style={{ marginBottom: 16, padding: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>UPCOMING SESSION</Text>
+              <Text style={{ color: '#10b981', fontSize: 14, fontWeight: 'bold' }}>{nextWorkout.split}</Text>
+            </View>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginTop: 8 }}>{nextWorkout.focus}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 4 }}>{nextWorkout.reason}</Text>
+            <TouchableOpacity 
+              style={{ marginTop: 16, backgroundColor: '#0ea5e9', padding: 12, borderRadius: 8, alignItems: 'center' }}
+              onPress={() => router.push('/(tabs)/workout')}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Plan Workout</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>

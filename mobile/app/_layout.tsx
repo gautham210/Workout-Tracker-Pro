@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Stack as ExpoStack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { View, ActivityIndicator } from 'react-native';
+import { initDb } from '../lib/db';
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
@@ -37,6 +38,10 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    initDb().catch(console.error);
+  }, []);
+
   return (
     <AuthProvider>
       <RootLayoutNav />

@@ -91,12 +91,58 @@ export const safeStorage = {
   }
 };
 
-const supabaseUrl = 'https://egefeiuyktelihsbbzyt.supabase.co';
-const supabaseAnonKey = 'sb_publishable_hd_-u_hgdVcXXjkCbRPkDA_xHf9XOfe';
+// P0: Secure session storage implementation
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+const authStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === 'web') return await safeStorage.getItem(key);
+      const val = await SecureStore.getItemAsync(key);
+      // Fallback to AsyncStorage to preserve existing sessions during migration
+      if (!val) {
+        const fallback = await safeStorage.getItem(key);
+        if (fallback) await SecureStore.setItemAsync(key, fallback);
+        return fallback;
+      }
+      return val;
+    } catch {
+      return await safeStorage.getItem(key);
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        await safeStorage.setItem(key, value);
+        return;
+      }
+      await SecureStore.setItemAsync(key, value);
+    } catch {
+      await safeStorage.setItem(key, value);
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        await safeStorage.removeItem(key);
+        return;
+      }
+      await SecureStore.deleteItemAsync(key);
+      // Also clear fallback just in case
+      await safeStorage.removeItem(key);
+    } catch {
+      await safeStorage.removeItem(key);
+    }
+  },
+};
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://egefeiuyktelihsbbzyt.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_hd_-u_hgdVcXXjkCbRPkDA_xHf9XOfe';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: safeStorage as any,
+    storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import { authenticate } from './_auth.js';
 
 const TIMEOUT_LIMIT_MS = 12000; // 12 seconds defensive timeout
 
@@ -17,8 +18,18 @@ export default async function handler(req, res) {
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // 1.5. Validate Auth
+  const { user, error: authError } = await authenticate(req);
+  if (authError) {
+    return res.status(401).json({ error: authError });
+  }
 
   // 2. Validate Content-Type
   const contentType = req.headers['content-type'] || '';
