@@ -82,7 +82,15 @@ export default function DashboardScreen() {
             <Text style={styles.name}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+              onPress={() => {
+                if (syncStatus.includes('failed')) {
+                  import('../../lib/sync').then(({ processOutbox }) => processOutbox());
+                }
+              }}
+              disabled={!syncStatus.includes('failed')}
+            >
               {syncStatus === 'Synced' ? (
                 <CheckCircle2 color="#10b981" size={16} />
               ) : syncStatus === 'Syncing' ? (
@@ -92,8 +100,10 @@ export default function DashboardScreen() {
               ) : (
                 <CloudOff color="#ef4444" size={16} />
               )}
-              <Text style={{ color: 'white', fontSize: 12, marginLeft: 6 }}>{syncStatus}</Text>
-            </View>
+              <Text style={{ color: 'white', fontSize: 12, marginLeft: 6 }}>
+                {syncStatus.includes('failed') ? 'Sync Failed [Retry]' : syncStatus}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
               <Text style={{ fontSize: 24 }}>⚙️</Text>
             </TouchableOpacity>

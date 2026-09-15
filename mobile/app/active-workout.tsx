@@ -196,8 +196,11 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
+  const [isFinishing, setIsFinishing] = useState(false);
+
   const finishWorkout = async () => {
-    if (!user || !session) return;
+    if (!user || !session || isFinishing) return;
+    setIsFinishing(true);
     
     try {
       const duration = Math.max(1, Math.round((new Date().getTime() - session.startTime) / 60000));
@@ -228,6 +231,7 @@ export default function ActiveWorkoutScreen() {
       router.replace('/(tabs)/history');
     } catch (err: any) {
       Alert.alert('Error', err.message);
+      setIsFinishing(false);
     }
   };
 
@@ -282,7 +286,11 @@ export default function ActiveWorkoutScreen() {
                     value={set.weight_kg}
                     onChangeText={(val) => {
                       const updated = [...exercises];
-                      updated[exIndex].sets[setIndex].weight_kg = val;
+                      let parsed = parseFloat(val);
+                      if (val === '') updated[exIndex].sets[setIndex].weight_kg = '';
+                      else if (!isNaN(parsed) && parsed >= 0) {
+                        updated[exIndex].sets[setIndex].weight_kg = val;
+                      }
                       setExercises(updated);
                     }}
                   />
@@ -295,12 +303,16 @@ export default function ActiveWorkoutScreen() {
                     value={set.reps}
                     onChangeText={(val) => {
                       const updated = [...exercises];
-                      updated[exIndex].sets[setIndex].reps = val;
+                      let parsed = parseInt(val);
+                      if (val === '') updated[exIndex].sets[setIndex].reps = '';
+                      else if (!isNaN(parsed) && parsed >= 0) {
+                        updated[exIndex].sets[setIndex].reps = parsed.toString();
+                      }
                       setExercises(updated);
                     }}
                   />
 
-                  {/* P1: Optional RPE/RIR fields */}
+                  {/* P1: Optional RPE/RIR fields with validation */}
                   <TextInput 
                     style={styles.inputSlim}
                     placeholder="-"
@@ -309,7 +321,12 @@ export default function ActiveWorkoutScreen() {
                     value={set.rpe}
                     onChangeText={(val) => {
                       const updated = [...exercises];
-                      updated[exIndex].sets[setIndex].rpe = val;
+                      let parsed = parseInt(val);
+                      if (val === '') updated[exIndex].sets[setIndex].rpe = '';
+                      else if (!isNaN(parsed)) {
+                        parsed = Math.max(1, Math.min(10, parsed)); // Clamp RPE 1-10
+                        updated[exIndex].sets[setIndex].rpe = parsed.toString();
+                      }
                       setExercises(updated);
                     }}
                   />
@@ -322,7 +339,12 @@ export default function ActiveWorkoutScreen() {
                     value={set.rir}
                     onChangeText={(val) => {
                       const updated = [...exercises];
-                      updated[exIndex].sets[setIndex].rir = val;
+                      let parsed = parseInt(val);
+                      if (val === '') updated[exIndex].sets[setIndex].rir = '';
+                      else if (!isNaN(parsed)) {
+                        parsed = Math.max(0, Math.min(10, parsed)); // Clamp RIR 0-10
+                        updated[exIndex].sets[setIndex].rir = parsed.toString();
+                      }
                       setExercises(updated);
                     }}
                   />
