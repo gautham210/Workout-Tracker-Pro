@@ -53,16 +53,20 @@ export default async function handler(req, res) {
 
     const systemPrompt = `You are a professional AI nutritionist and food analyzer.
 Your task is to estimate the macronutrients and calories of the food in the provided image.
+Visual food analysis is inherently uncertain. You MUST identify uncertainty, make explicit assumptions (e.g. "assuming cooked in oil"), and ask ONE high-value follow-up question if a missing detail (like portion size or cooking method) would drastically change the estimate.
+
 You must return the analysis strictly as valid JSON, with NO markdown formatting, NO backticks, and NO explanations outside the JSON.
-Values must be treated as estimates.
 
 Schema:
 {
-  "foodName": "Identified dish/food (e.g. Grilled Chicken Salad)",
-  "calories": number (estimated total),
-  "protein": number (estimated grams),
-  "carbs": number (estimated grams),
-  "fat": number (estimated grams)
+  "detectedFoods": ["List of identified items"],
+  "caloriesRange": "e.g. '450-600'",
+  "proteinRange": "e.g. '30-40'",
+  "carbsRange": "e.g. '40-50'",
+  "fatRange": "e.g. '15-25'",
+  "confidence": "High|Medium|Low",
+  "assumptions": ["List of assumptions made"],
+  "followUpQuestion": "A single crucial question for the user to refine the estimate (or null if trivial)"
 }`;
 
     const apiCallPromise = client.chat.completions.create({
@@ -98,7 +102,9 @@ Schema:
       return res.status(500).json({ error: 'AI returned an invalid analysis format.' });
     }
 
-    const formattedResponse = `I've analyzed the image. This looks like ${data.foodName}.\n\nEstimated Macros (Tap to Edit):\n- Calories: ~${data.calories} kcal\n- Protein: ${data.protein}g\n- Carbs: ${data.carbs}g\n- Fat: ${data.fat}g`;
+    const assumptionsText = data.assumptions && data.assumptions.length > 0 ? `\nAssumptions: ${data.assumptions.join(', ')}` : '';
+    const followUp = data.followUpQuestion ? `\n\nQuestion: ${data.followUpQuestion}` : '';
+    const formattedResponse = `I detected: ${data.detectedFoods?.join(', ') || 'Unknown food'}.\n\nEstimated Macros:\n- Calories: ${data.caloriesRange} kcal\n- Protein: ${data.proteinRange}g\n- Carbs: ${data.carbsRange}g\n- Fat: ${data.fatRange}g${assumptionsText}${followUp}`;
 
     return res.status(200).json({ text: formattedResponse, macros: data });
   } catch (err) {

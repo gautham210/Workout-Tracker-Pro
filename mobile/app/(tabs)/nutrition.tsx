@@ -29,9 +29,8 @@ export default function NutritionScreen() {
     setLoading(true);
 
     const context = {
-      user_stats: "Weight: 78.5kg",
-      goals: "Protein target: 160g, Calorie target: 2800",
-      domain_restrictions: "Nutrition and diet only."
+      user_stats: "No active profile data",
+      goals: "No active goals",
     };
 
     if (selectedImage) {

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAr
 import GlassCard from '../../components/GlassCard';
 import { Send, Bot, User, Sparkles } from 'lucide-react-native';
 import { sendChatMessage, ChatMessage } from '../../lib/api';
+import { buildAICoachContext } from '../../lib/ai-context';
 
 export default function CoachScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -21,12 +22,7 @@ export default function CoachScreen() {
     setMessages(newMessages);
     setLoading(true);
 
-    // Context Injection for AI
-    const context = {
-      user_stats: "Weight: 78.5kg, Goal: Hypertrophy",
-      recent_prs: "Bench Press: 100kg x 5",
-      domain_restrictions: "Fitness and nutrition only."
-    };
+    const context = await buildAICoachContext();
 
     const response = await sendChatMessage(newMessages, context, false);
     

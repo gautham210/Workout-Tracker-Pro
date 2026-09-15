@@ -79,7 +79,7 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Ready to train,</Text>
-            <Text style={styles.title}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
+            <Text style={styles.name}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
