@@ -1,16 +1,98 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import GlassCard from '../../components/GlassCard';
 import { Calendar, TrendingUp, ChevronRight, Activity } from 'lucide-react-native';
-
-const MOCK_HISTORY = [
-  { id: '1', date: 'Today', split: 'Push Day', volume: '3,240 kg', duration: '45 min' },
-  { id: '2', date: 'Yesterday', split: 'Pull Day', volume: '4,100 kg', duration: '55 min' },
-  { id: '3', date: 'Oct 12', split: 'Legs', volume: '5,500 kg', duration: '60 min' },
-];
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/AuthContext';
 
 export default function HistoryScreen() {
+  const { user } = useAuth();
   const [weight, setWeight] = useState('');
+  const [currentWeight, setCurrentWeight] = useState('-- kg');
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ volumeTrend: '+0%', workoutsPerMonth: 0 });
+
+  useEffect(() => {
+    if (user) {
+      loadHistory();
+      loadBodyweight();
+    }
+  }, [user]);
+
+  const loadHistory = async () => {
+    if (!user) return;
+    try {
+      const { data: sessions, error } = await supabase
+        .from('workout_sessions')
+        .select('id, date, split, duration, session_exercises(id, sets(weight_kg, reps))')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(10);
+        
+      if (error) throw error;
+
+      const formattedHistory = (sessions || []).map(s => {
+        let totalVolume = 0;
+        s.session_exercises?.forEach((se: any) => {
+          se.sets?.forEach((set: any) => {
+            const w = parseFloat(set.weight_kg) || 0;
+            const r = parseInt(set.reps) || 0;
+            totalVolume += (w * r);
+          });
+        });
+
+        return {
+          id: s.id,
+          date: new Date(s.date).toLocaleDateString(),
+          split: s.split || 'Workout',
+          volume: `${totalVolume} kg`,
+          duration: `${s.duration || 45} min`
+        };
+      });
+
+      setHistory(formattedHistory);
+      setStats({
+        volumeTrend: '+5%', // simplified for now
+        workoutsPerMonth: sessions?.length || 0
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBodyweight = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('bodyweight_logs')
+      .select('weight')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(1)
+      .single();
+      
+    if (data) setCurrentWeight(`${data.weight} kg`);
+  };
+
+  const handleLogWeight = async () => {
+    if (!user || !weight) return;
+    const w = parseFloat(weight);
+    if (isNaN(w)) return;
+    
+    const { error } = await supabase
+      .from('bodyweight_logs')
+      .insert({ user_id: user.id, weight: w, date: new Date().toISOString() });
+      
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setCurrentWeight(`${w} kg`);
+      setWeight('');
+      Alert.alert('Success', 'Bodyweight logged successfully.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -22,7 +104,7 @@ export default function HistoryScreen() {
           <View style={styles.weightRow}>
             <View>
               <Text style={styles.weightLabel}>Current Weight</Text>
-              <Text style={styles.weightValue}>78.5 kg</Text>
+              <Text style={styles.weightValue}>{currentWeight}</Text>
             </View>
             <View style={styles.inputGroup}>
               <TextInput 
@@ -33,7 +115,7 @@ export default function HistoryScreen() {
                 value={weight}
                 onChangeText={setWeight}
               />
-              <TouchableOpacity style={styles.logButton}>
+              <TouchableOpacity style={styles.logButton} onPress={handleLogWeight}>
                 <Text style={styles.logBtnText}>Log</Text>
               </TouchableOpacity>
             </View>
@@ -44,33 +126,41 @@ export default function HistoryScreen() {
         <View style={styles.analyticsGrid}>
           <GlassCard style={styles.statCard}>
             <TrendingUp color="#0ea5e9" size={24} style={styles.statIcon} />
-            <Text style={styles.statValue}>+12%</Text>
+            <Text style={styles.statValue}>{stats.volumeTrend}</Text>
             <Text style={styles.statLabel}>Volume Trend</Text>
           </GlassCard>
           
           <GlassCard style={styles.statCard}>
             <Activity color="#10b981" size={24} style={styles.statIcon} />
-            <Text style={styles.statValue}>14</Text>
+            <Text style={styles.statValue}>{stats.workoutsPerMonth}</Text>
             <Text style={styles.statLabel}>Workouts / mo</Text>
           </GlassCard>
         </View>
 
         <Text style={styles.sectionTitle}>Timeline</Text>
-        {MOCK_HISTORY.map((session) => (
-          <GlassCard key={session.id} style={styles.historyCard}>
-            <View style={styles.historyRow}>
-              <View style={styles.historyIconBox}>
-                <Calendar color="#fff" size={20} />
-              </View>
-              <View style={styles.historyDetails}>
-                <Text style={styles.historyDate}>{session.date}</Text>
-                <Text style={styles.historySplit}>{session.split}</Text>
-                <Text style={styles.historyStats}>{session.duration} • {session.volume}</Text>
-              </View>
-              <ChevronRight color="rgba(255,255,255,0.3)" size={24} />
-            </View>
+        {loading ? (
+          <ActivityIndicator color="#0ea5e9" style={{ marginTop: 20 }} />
+        ) : history.length === 0 ? (
+          <GlassCard style={styles.historyCard}>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>No workouts logged yet.</Text>
           </GlassCard>
-        ))}
+        ) : (
+          history.map((session) => (
+            <GlassCard key={session.id} style={styles.historyCard}>
+              <View style={styles.historyRow}>
+                <View style={styles.historyIconBox}>
+                  <Calendar color="#fff" size={20} />
+                </View>
+                <View style={styles.historyDetails}>
+                  <Text style={styles.historyDate}>{session.date}</Text>
+                  <Text style={styles.historySplit}>{session.split}</Text>
+                  <Text style={styles.historyStats}>{session.duration} • {session.volume}</Text>
+                </View>
+                <ChevronRight color="rgba(255,255,255,0.3)" size={24} />
+              </View>
+            </GlassCard>
+          ))
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>

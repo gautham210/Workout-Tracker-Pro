@@ -1,41 +1,49 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, SafeAreaView, TextInput, Alert } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import GlassCard from '../components/GlassCard';
 import WorkoutTimer from '../components/WorkoutTimer';
 import HydrationAlert from '../components/HydrationAlert';
 import { Check, ArrowLeft, X } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-// Mock initial data
-const MOCK_EXERCISES = [
-  {
-    exercise: { id: '1', name: 'Barbell Bench Press', muscle_group: 'Chest' },
-    sets: [
-      { weight_kg: '60', reps: '10', completed: false, suggestedWeight: '62.5', suggestedReps: '8' },
-      { weight_kg: '60', reps: '10', completed: false },
-      { weight_kg: '60', reps: '10', completed: false },
-    ]
-  },
-  {
-    exercise: { id: '2', name: 'Incline Dumbbell Press', muscle_group: 'Chest' },
-    sets: [
-      { weight_kg: '25', reps: '12', completed: false },
-      { weight_kg: '25', reps: '12', completed: false },
-    ]
-  }
-];
-
 export default function ActiveWorkoutScreen() {
   const router = useRouter();
-  const [exercises, setExercises] = useState(MOCK_EXERCISES);
+  const params = useLocalSearchParams();
+  const { user } = useAuth();
+  const [exercises, setExercises] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   
   // Timers and Alerts state
   const [timerTrigger, setTimerTrigger] = useState(0);
-  const [activeExerciseName, setActiveExerciseName] = useState(MOCK_EXERCISES[0].exercise.name);
+  const [activeExerciseName, setActiveExerciseName] = useState('');
   const [completedSetsCount, setCompletedSetsCount] = useState(0);
+  const [startTime] = useState(new Date().getTime());
+
+  useEffect(() => {
+    if (params.exercises) {
+      try {
+        const parsed = JSON.parse(params.exercises as string);
+        const mapped = parsed.map((ex: any) => ({
+          exercise: ex,
+          sets: [
+            { weight_kg: '', reps: '', completed: false, suggestedWeight: '', suggestedReps: '' },
+            { weight_kg: '', reps: '', completed: false },
+            { weight_kg: '', reps: '', completed: false },
+          ]
+        }));
+        setExercises(mapped);
+        if (mapped.length > 0) {
+          setActiveExerciseName(mapped[0].exercise.name);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [params.exercises]);
 
   const toggleSet = (exIndex: number, setIndex: number) => {
     const updated = [...exercises];
@@ -61,9 +69,53 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
-  const finishWorkout = () => {
-    // In real app, save to Supabase here
-    router.replace('/(tabs)/history');
+  const finishWorkout = async () => {
+    if (!user) return;
+    
+    // Save to Supabase
+    try {
+      const { data: sessionData, error: sessionErr } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          date: new Date().toISOString(),
+          duration: Math.max(1, Math.round((new Date().getTime() - startTime) / 60000)),
+          split: 'Custom'
+        })
+        .select()
+        .single();
+        
+      if (sessionErr) throw sessionErr;
+
+      for (const ex of exercises) {
+        const completedSets = ex.sets.filter((s: any) => s.completed && s.weight_kg && s.reps);
+        if (completedSets.length > 0) {
+          const { data: seData, error: seErr } = await supabase
+            .from('session_exercises')
+            .insert({
+              session_id: sessionData.id,
+              exercise_id: ex.exercise.id
+            })
+            .select()
+            .single();
+            
+          if (seErr) throw seErr;
+          
+          const setsToInsert = completedSets.map((s: any) => ({
+            session_exercise_id: seData.id,
+            weight_kg: parseFloat(s.weight_kg),
+            reps: parseInt(s.reps)
+          }));
+          
+          await supabase.from('sets').insert(setsToInsert);
+        }
+      }
+      
+      Alert.alert('Success', 'Workout saved!');
+      router.replace('/(tabs)/history');
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
   };
 
   return (
@@ -98,7 +150,7 @@ export default function ActiveWorkoutScreen() {
                 <Text style={styles.colHeader}>Done</Text>
               </View>
 
-              {ex.sets.map((set, setIndex) => (
+              {ex.sets.map((set: any, setIndex: number) => (
                 <View key={setIndex} style={[styles.setRow, set.completed && styles.setCompletedRow]}>
                   <Text style={styles.setText}>{setIndex + 1}</Text>
                   

@@ -10,19 +10,35 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!logText.trim()) return;
     
     setLoading(true);
     setSuccess(false);
 
-    // Mock API call to parser endpoint
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const response = await fetch('http://10.0.2.2:5173/api/parse-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: logText })
+      });
+
+      if (!response.ok) {
+        throw new Error('API Error: Could not parse workout log.');
+      }
+      
+      const data = await response.json();
+      
+      // We would normally insert into Supabase here with data.session
+      // For now, indicate success parsing from real AI endpoint
       setSuccess(true);
       setLogText('');
-      Alert.alert("Import Successful", "Your workout logs were parsed and added to your history.");
-    }, 2000);
+      Alert.alert("Import Successful", `Parsed ${data.session?.exercises?.length || 0} exercises successfully.`);
+    } catch (err: any) {
+      Alert.alert("Import Failed", err.message || "Failed to reach AI parser endpoint.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

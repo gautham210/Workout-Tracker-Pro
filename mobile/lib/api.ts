@@ -29,44 +29,31 @@ export async function sendChatMessage(
     });
 
     if (response.ok) {
-      return await response.json();
-    }
-  } catch (err) {
-    console.warn('[API] Dev server unreachable, triggering local Llama simulation fallback.');
-  }
-
-  // Robust fallback simulation if local dev server is offline
-  await new Promise(resolve => setTimeout(resolve, 800)); // Natural network latency
-
-  const lastUserMessage = messages[messages.length - 1]?.content || '';
-  const query = lastUserMessage.toLowerCase();
-
-  // âââ WORKOUT GENERATION INTENT FALLBACK âââ
-  if (query.includes('workout') || query.includes('routine') || query.includes('split') || query.includes('push') || query.includes('pull')) {
-    let split = 'Push';
-    let exercises = ['Flat Barbell Bench Press', 'Incline Dumbbell Press', 'Dumbbell Lateral Raise', 'Tricep Rope Pushdown'];
-    
-    if (query.includes('pull')) {
-      split = 'Pull';
-      exercises = ['Lat Pulldown', 'Barbell Row', 'Bicep Curl', 'Reverse Fly'];
-    } else if (query.includes('leg')) {
-      split = 'Legs';
-      exercises = ['Barbell Squat', 'Romanian Deadlift', 'Leg Press', 'Seated Calf Raise'];
-    }
-
-    const text = `Here is your simulated high-intensity ${split} Day routine. Components include ${exercises.join(', ')}.\n\nKeep rest periods strict.`;
-    return {
-      text,
-      intent: 'workout_generation',
-      suggestedWorkout: {
-        split,
-        exercises
+      const data = await response.json();
+      
+      // Attempt to extract workout suggestions if they exist in the raw text
+      let suggestedWorkout = undefined;
+      const workoutMatch = data.text.match(/```workout-suggested\s*([\s\S]*?)\s*```/);
+      if (workoutMatch && workoutMatch[1]) {
+        try {
+          suggestedWorkout = JSON.parse(workoutMatch[1]);
+          // Clean the markdown from the text so the UI doesn't show it
+          data.text = data.text.replace(/```workout-suggested\s*([\s\S]*?)\s*```/, '').trim();
+        } catch (e) {
+          console.warn('Failed to parse suggested workout JSON', e);
+        }
       }
-    };
-  }
 
-  return {
-    text: "Simulated response from Coach. I'm currently running in offline mode.",
-    intent: 'general'
-  };
+      return {
+        ...data,
+        suggestedWorkout
+      };
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server responded with ${response.status}`);
+    }
+  } catch (err: any) {
+    console.error('[API] AI request failed:', err);
+    throw new Error(err.message || 'Failed to communicate with AI Coach endpoint.');
+  }
 }

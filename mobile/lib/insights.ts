@@ -19,54 +19,68 @@ export async function generateInsights(userId: string): Promise<Insight[]> {
   if (!userId) return insights;
 
   try {
-    // In a real implementation, we would query `workout_sessions`, `session_exercises`, 
-    // and `sets` to aggregate volume, frequency, and max weights.
-    
-    // For this build phase, we mock the evidence aggregation structure that a real backend would use:
-    const mockDbAggregation = {
-      benchMaxLastMonth: 80,
-      benchMaxThisMonth: 85,
-      missedWorkoutsCount: 3,
-      legVolumeRatio: 0.15,
-      bodyweightTrend: 'downward',
-    };
+    const { data: sessions, error } = await supabase
+      .from('workout_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false });
 
-    // 1. Progression Insight
-    if (mockDbAggregation.benchMaxThisMonth > mockDbAggregation.benchMaxLastMonth) {
+    if (error) throw error;
+    
+    if (!sessions || sessions.length < 3) {
       insights.push({
-        id: 'progression-bench',
-        type: 'progression',
-        title: 'Strength Progression: Bench Press',
-        whatHappened: 'You increased your max Bench Press weight.',
-        evidence: `Last month's max was ${mockDbAggregation.benchMaxLastMonth}kg. This month you hit ${mockDbAggregation.benchMaxThisMonth}kg.`,
-        whyItMatters: 'Progressive overload is the primary driver of hypertrophy and strength gains.',
-        whatToDoNext: 'Maintain your current programming, but start focusing on accessory tricep work to support further pushing strength.',
+        id: 'insufficient-data',
+        type: 'trend',
+        title: 'Need More Data',
+        whatHappened: 'Not enough workout sessions logged yet.',
+        evidence: `You have logged ${sessions?.length || 0} sessions so far.`,
+        whyItMatters: 'AI Insights require a baseline of data to detect meaningful trends and patterns.',
+        whatToDoNext: 'Keep tracking your workouts! We recommend logging at least 3-5 sessions before insights begin generating.',
+      });
+      return insights;
+    }
+
+    // Consistency Insight
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentSessions = sessions.filter(s => new Date(s.date) >= thirtyDaysAgo);
+    
+    if (recentSessions.length < 4) {
+      insights.push({
+        id: 'consistency-drop',
+        type: 'consistency',
+        title: 'Low Workout Frequency',
+        whatHappened: 'You have worked out less than once a week over the last month.',
+        evidence: `You logged ${recentSessions.length} sessions in the last 30 days.`,
+        whyItMatters: 'Consistency is the primary driver of adaptations. Long breaks reset muscle protein synthesis.',
+        whatToDoNext: 'Try scheduling 2-3 shorter sessions per week rather than relying on motivation for long workouts.',
+      });
+    } else {
+      insights.push({
+        id: 'consistency-good',
+        type: 'consistency',
+        title: 'Great Consistency',
+        whatHappened: 'You are consistently hitting the gym.',
+        evidence: `You logged ${recentSessions.length} sessions in the last 30 days.`,
+        whyItMatters: 'Regular stimulus is required for hypertrophy.',
+        whatToDoNext: 'Keep up the great work and ensure you are recovering adequately.',
       });
     }
 
-    // 2. Imbalance Insight
-    if (mockDbAggregation.legVolumeRatio < 0.25) {
+    // Imbalance Insight (Using split strings)
+    const legSessions = recentSessions.filter(s => s.split?.toLowerCase().includes('leg')).length;
+    const totalSessions = recentSessions.length;
+    const legRatio = totalSessions > 0 ? legSessions / totalSessions : 0;
+
+    if (legRatio < 0.2 && totalSessions >= 5) {
       insights.push({
         id: 'imbalance-legs',
         type: 'imbalance',
         title: 'Volume Imbalance: Legs',
-        whatHappened: 'Your leg training volume is significantly lower than your upper body volume.',
-        evidence: `Leg exercises make up only ${(mockDbAggregation.legVolumeRatio * 100).toFixed(0)}% of your total weekly volume.`,
-        whyItMatters: 'Neglecting leg volume can lead to asymmetrical physique development and limit overall systemic growth stimulus.',
-        whatToDoNext: 'Add one additional hamstring (e.g. RDLs) and quad (e.g. Leg Press) exercise to your weekly split.',
-      });
-    }
-
-    // 3. Consistency Insight
-    if (mockDbAggregation.missedWorkoutsCount >= 3) {
-      insights.push({
-        id: 'consistency-drop',
-        type: 'consistency',
-        title: 'Consistency Drop',
-        whatHappened: 'You missed multiple scheduled sessions this week.',
-        evidence: `You missed ${mockDbAggregation.missedWorkoutsCount} planned workouts in the last 7 days.`,
-        whyItMatters: 'Consistency is more important than intensity. Missing sessions interrupts the protein synthesis cycle.',
-        whatToDoNext: 'If time is an issue, try doing a 20-minute full-body maintenance session instead of skipping entirely.',
+        whatHappened: 'Your leg training frequency is low compared to your upper body.',
+        evidence: `Leg focused sessions make up only ${(legRatio * 100).toFixed(0)}% of your recent workouts.`,
+        whyItMatters: 'Neglecting leg volume can lead to asymmetrical physique development.',
+        whatToDoNext: 'Consider adding a dedicated leg day or adding squat variations to your full-body days.',
       });
     }
 

@@ -14,8 +14,11 @@ export default function DashboardScreen() {
 
   const loadData = async () => {
     setRefreshing(true);
-    // Use dummy user ID if none exists for UI dev
-    const data = await generateInsights(user?.id || 'demo-user');
+    if (!user) {
+      setRefreshing(false);
+      return;
+    }
+    const data = await generateInsights(user.id);
     setInsights(data);
     setRefreshing(false);
   };

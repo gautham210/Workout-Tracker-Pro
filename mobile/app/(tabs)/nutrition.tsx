@@ -35,18 +35,37 @@ export default function NutritionScreen() {
     };
 
     if (selectedImage) {
-      // Mock server-side image processing fallback
-      setTimeout(() => {
+      try {
+        // Attempt to call a vision endpoint that would process the base64 image
+        const response = await fetch('http://10.0.2.2:5173/api/parse-food', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUri: selectedImage })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Vision API endpoint (/api/parse-food) is not implemented on the server.');
+        }
+        
+        const data = await response.json();
+        setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+      } catch (err: any) {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: "I've analyzed the image. This looks like a grilled chicken salad. Estimated Macros:\n- Calories: ~350 kcal\n- Protein: 35g\n- Carbs: 12g\n- Fat: 18g"
+          content: `Error: ${err.message || 'Failed to process image.'} Please configure the Vision API endpoint.`
         }]);
+      } finally {
         setLoading(false);
-      }, 1500);
+      }
     } else {
-      const response = await sendChatMessage(newMessages, context, true);
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text }]);
-      setLoading(false);
+      try {
+        const response = await sendChatMessage(newMessages, context, true);
+        setMessages(prev => [...prev, { role: 'assistant', content: response.text }]);
+      } catch (err: any) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 

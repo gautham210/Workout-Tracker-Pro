@@ -1,25 +1,45 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import GlassCard from '../../components/GlassCard';
 import { Plus, Play, Trash2 } from 'lucide-react-native';
-
-const PRESET_EXERCISES = [
-  { id: '1', name: 'Barbell Bench Press', muscle_group: 'Chest' },
-  { id: '2', name: 'Incline Dumbbell Press', muscle_group: 'Chest' },
-  { id: '3', name: 'Lat Pulldown', muscle_group: 'Back' },
-  { id: '4', name: 'Barbell Squat', muscle_group: 'Legs' },
-];
+import { supabase } from '../../lib/supabase';
 
 export default function WorkoutBuilderScreen() {
   const router = useRouter();
-  const [selectedExercises, setSelectedExercises] = useState(PRESET_EXERCISES.slice(0, 2));
+  const [availableExercises, setAvailableExercises] = useState<any[]>([]);
+  const [selectedExercises, setSelectedExercises] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadExercises();
+  }, []);
+
+  const loadExercises = async () => {
+    const { data } = await supabase.from('exercises').select('id, name, muscle_group').limit(20);
+    if (data) {
+      setAvailableExercises(data);
+      // pre-select first 2 for convenience if available
+      setSelectedExercises(data.slice(0, 2));
+    }
+    setLoading(false);
+  };
 
   const startSession = () => {
-    // In a real app we'd pass the payload via global store or route params
-    // We'll navigate to the active session modal
-    router.push('/active-workout');
+    // Pass selected exercises via router params as JSON string
+    router.push({
+      pathname: '/active-workout',
+      params: { exercises: JSON.stringify(selectedExercises) }
+    });
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ActivityIndicator color="#0ea5e9" style={{ marginTop: 40 }} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -43,7 +63,11 @@ export default function WorkoutBuilderScreen() {
 
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={() => setSelectedExercises(prev => [...prev, PRESET_EXERCISES[2]])}
+            onPress={() => {
+              // Just a simple rotation of available exercises for demo
+              const nextEx = availableExercises[selectedExercises.length % availableExercises.length];
+              if (nextEx) setSelectedExercises(prev => [...prev, nextEx]);
+            }}
           >
             <Plus color="#0ea5e9" size={24} />
             <Text style={styles.addText}>Add Exercise</Text>
