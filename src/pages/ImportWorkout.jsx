@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { authenticatedApiPost } from '../lib/api';
 import {
   Upload, Sparkles, Loader2, Check, AlertTriangle,
   ChevronDown, X, Zap, Calendar, Dumbbell, ArrowRight,
@@ -470,17 +471,7 @@ export default function ImportWorkout() {
           currentLabel: `Parsing day ${i + 1}/${chunks.length}: ${dayLabel}${dateLabel}...`
         });
 
-        const res = await fetch('/api/parse-workout', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ rawText: chunk.rawChunk, exercises: exerciseNames }),
-        });
-
-        const json = await res.json();
-
-        if (!res.ok) {
-          throw new Error(json.error ?? `AI failed to parse day block ${i + 1}`);
-        }
+        const json = await authenticatedApiPost('/api/parse-workout', { rawText: chunk.rawChunk, exercises: exerciseNames });
 
         parsedSessionsTemp.push({
           date: json.date ?? chunk.date ?? new Date().toLocaleDateString('en-CA'),
@@ -545,80 +536,27 @@ export default function ImportWorkout() {
     let totalSets = 0;
 
     try {
-      for (let sIdx = 0; sIdx < reviewSessions.length; sIdx++) {
-        const session = reviewSessions[sIdx];
-        if (session.exercises.length === 0) continue;
-
-        let sessionDate = session.date
-          ? new Date(session.date + 'T12:00:00').toISOString()
-          : new Date(new Date().toLocaleDateString('en-CA') + 'T12:00:00').toISOString();
-
-        // Create separate workout sessions
-        const { data: sessionData, error: sessionError } = await supabase
-          .from('workout_sessions')
-          .insert({
-            user_id:    user.id,
-            date:       sessionDate,
-            split_type: 'AI Import',
-            split_day:  session.split || 'Custom',
-            notes:      `AI chunked import.`,
-          })
-          .select()
-          .single();
-
-        if (sessionError || !sessionData) {
-          throw new Error(sessionError?.message ?? `Failed to create session for Day ${sIdx + 1}`);
-        }
-
-        for (let i = 0; i < session.exercises.length; i++) {
-          const ex = session.exercises[i];
-          if (!ex.name.trim()) continue;
-
-          const { data: dbEx } = await supabase
-            .from('exercises')
-            .select('id')
-            .ilike('name', ex.name.trim())
-            .limit(1)
-            .single();
-
-          let exerciseId = dbEx?.id ?? null;
-
-          if (!exerciseId) {
-            const { data: newEx } = await supabase
-              .from('exercises')
-              .insert({ name: ex.name.trim(), muscle_group: 'Other' })
-              .select('id')
-              .single();
-            exerciseId = newEx?.id ?? null;
-          }
-
-          if (!exerciseId) continue;
-
-          const { data: seData } = await supabase
-            .from('session_exercises')
-            .insert({ session_id: sessionData.id, exercise_id: exerciseId, order_index: i })
-            .select()
-            .single();
-
-          if (seData && ex.sets?.length > 0) {
-            const validSets = ex.sets.filter(s => s.reps > 0);
-            if (validSets.length > 0) {
-              await supabase.from('sets').insert(
-                validSets.map((s, idx) => ({
-                  session_exercise_id: seData.id,
-                  set_number:          idx + 1,
-                  weight_kg:           s.weight_kg ?? 0,
-                  reps:                s.reps       ?? 0,
-                }))
-              );
-              validSets.forEach(s => {
-                totalVol  += (s.weight_kg ?? 0) * (s.reps ?? 0);
-                totalSets += 1;
-              });
-            }
-          }
-        }
+      const { data: catalog, error: catalogError } = await supabase.from('exercises').select('id,name').limit(1000);
+      if (catalogError) throw new Error('Could not load the exercise catalog.');
+      const exercisesByName = new Map((catalog || []).map((exercise) => [exercise.name.toLowerCase(), exercise.id]));
+      const graphs = [];
+      for (const session of reviewSessions) {
+        const sessionDate = session.date ? new Date(`${session.date}T12:00:00`).toISOString() : new Date().toISOString();
+        const graphExercises = session.exercises.flatMap((exercise, exerciseIndex) => {
+          const exerciseId = exercisesByName.get(exercise.name.trim().toLowerCase());
+          const sets = (exercise.sets || []).flatMap((set, setIndex) => {
+            const weight = Number(set.weight_kg); const reps = Number(set.reps);
+            if (!Number.isFinite(weight) || weight < 0 || weight > 1000 || !Number.isInteger(reps) || reps < 1 || reps > 500) return [];
+            totalVol += weight * reps; totalSets += 1;
+            return [{ id: crypto.randomUUID(), set_number: setIndex + 1, weight_kg: weight, reps, completed: true, rpe: null, rir: null }];
+          });
+          return exerciseId && sets.length ? [{ id: crypto.randomUUID(), exercise_id: exerciseId, order_index: exerciseIndex, sets }] : [];
+        });
+        if (!graphExercises.length) throw new Error(`No valid catalog exercises were available for ${session.split || 'this session'}.`);
+        graphs.push({ id: crypto.randomUUID(), date: sessionDate, split_type: 'imported', split_day: (session.split || 'Custom').slice(0, 80), notes: 'AI-assisted import; review source accuracy.', duration_minutes: null, is_finished: true, exercises: graphExercises });
       }
+      const { error } = await supabase.rpc('sync_workout_graphs', { p_workouts: graphs });
+      if (error) throw new Error(error.message || 'Workout import failed atomically; no partial workout was saved.');
 
       setSavedData({ vol: totalVol, sets: totalSets });
       setStep('done');

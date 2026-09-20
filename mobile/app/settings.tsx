@@ -3,38 +3,65 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAr
 import { useRouter } from 'expo-router';
 import GlassCard from '../components/GlassCard';
 import { UploadCloud, ArrowLeft, CheckCircle } from 'lucide-react-native';
-import { BACKEND_URL } from '../lib/api';
+import { parseWorkoutFromText } from '../lib/api';
+import { useAuth } from '../lib/AuthContext';
+import { generateUUID, getDb, upsertLocalExercises } from '../lib/db';
+import { queueCompletedWorkout, processOutbox } from '../lib/sync';
+import { supabase } from '../lib/supabase';
+
+type ParsedSet = { weight_kg: number; reps: number };
+type ParsedExercise = { name: string; sets: ParsedSet[] };
+type CatalogExercise = { id: string; name: string; muscle_group?: string | null; description?: string | null };
+type ResolvedExercise = { catalogExercise: CatalogExercise; sets: ParsedSet[]; index: number };
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [logText, setLogText] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const handleImport = async () => {
-    if (!logText.trim()) return;
+    if (!logText.trim() || !user) return;
     
     setLoading(true);
     setSuccess(false);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/parse-workout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: logText })
+      const parsed = await parseWorkoutFromText(logText, []);
+      const parsedExercises: ParsedExercise[] = Array.isArray(parsed.exercises) ? parsed.exercises : [];
+      const names = parsedExercises.map((exercise: { name?: string }) => exercise.name).filter(Boolean);
+      const { data: catalog, error: catalogError } = await supabase.from('exercises').select('id,name,muscle_group,description').in('name', names);
+      if (catalogError) throw new Error('Could not verify parsed exercises against the exercise catalog.');
+      const catalogExercises = (catalog || []) as CatalogExercise[];
+      const byName = new Map(catalogExercises.map((exercise) => [exercise.name.toLowerCase(), exercise]));
+      const resolved: ResolvedExercise[] = parsedExercises.flatMap((exercise, index) => {
+        const catalogExercise = byName.get(exercise.name.toLowerCase());
+        const sets: ParsedSet[] = Array.isArray(exercise.sets) ? exercise.sets.filter((set: ParsedSet) => Number.isFinite(set.weight_kg) && set.weight_kg >= 0 && Number.isInteger(set.reps) && set.reps > 0) : [];
+        return catalogExercise && sets.length ? [{ catalogExercise, sets, index }] : [];
       });
-
-      if (!response.ok) {
-        throw new Error('API Error: Could not parse workout log.');
-      }
-      
-      const data = await response.json();
-      
-      // We would normally insert into Supabase here with data.session
-      // For now, indicate success parsing from real AI endpoint
+      if (!resolved.length) throw new Error('No parsed exercises matched the exercise catalog. Review the log and try again.');
+      const id = generateUUID();
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date || '') ? `${parsed.date}T12:00:00.000Z` : new Date().toISOString();
+      const workout = {
+        id, date, split_type: 'imported', split_day: typeof parsed.split === 'string' ? parsed.split.slice(0, 80) : 'Imported', duration_minutes: null, is_finished: true,
+        exercises: resolved.map(({ catalogExercise, sets, index }) => ({ id: generateUUID(), exercise_id: catalogExercise.id, order_index: index, sets: sets.map((set, setIndex) => ({ id: generateUUID(), set_number: setIndex + 1, weight_kg: set.weight_kg, reps: set.reps, completed: true, rpe: null, rir: null })) })),
+      };
+      const db = await getDb();
+      await upsertLocalExercises(resolved.map(({ catalogExercise }) => catalogExercise));
+      await db.withTransactionAsync(async () => {
+        const now = new Date().toISOString();
+        await db.runAsync(`INSERT INTO workout_sessions (id,user_id,date,split_type,split_day,duration_minutes,is_finished,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?)`, [id, user.id, date, 'imported', workout.split_day, null, now, now]);
+        for (const exercise of workout.exercises) {
+          await db.runAsync(`INSERT INTO session_exercises (id,session_id,exercise_id,order_index) VALUES (?,?,?,?)`, [exercise.id, id, exercise.exercise_id, exercise.order_index]);
+          for (const set of exercise.sets) await db.runAsync(`INSERT INTO sets (id,session_exercise_id,set_number,weight_kg,reps,completed,rpe,rir) VALUES (?,?,?,?,?,1,?,?)`, [set.id, exercise.id, set.set_number, set.weight_kg, set.reps, null, null]);
+        }
+        await queueCompletedWorkout(user.id, workout);
+      });
+      processOutbox(user.id).catch(() => undefined);
       setSuccess(true);
       setLogText('');
-      Alert.alert("Import Successful", `Parsed ${data.session?.exercises?.length || 0} exercises successfully.`);
+      Alert.alert('Saved locally', `Imported ${resolved.length} exercise${resolved.length === 1 ? '' : 's'} and queued it for sync.`);
     } catch (err: any) {
       Alert.alert("Import Failed", err.message || "Failed to reach AI parser endpoint.");
     } finally {
@@ -106,10 +133,8 @@ export default function SettingsScreen() {
         <TouchableOpacity 
           style={styles.logoutButton} 
           onPress={async () => {
-            const { clearLocalDb } = await import('../lib/db');
-            const { supabase } = await import('../lib/supabase');
-            await clearLocalDb();
-            await supabase.auth.signOut();
+            const { error } = await supabase.auth.signOut();
+            if (error) { Alert.alert('Sign out failed', error.message); return; }
             router.replace('/(auth)/sign-in');
           }}
         >

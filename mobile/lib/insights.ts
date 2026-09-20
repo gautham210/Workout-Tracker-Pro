@@ -14,6 +14,7 @@ export interface NextWorkout {
   split: string;
   focus: string;
   reason: string;
+  exercises?: string[];
 }
 
 /**
@@ -28,8 +29,9 @@ export async function generateInsights(userId: string): Promise<{ insights: Insi
   try {
     const { data: sessions, error } = await supabase
       .from('workout_sessions')
-      .select('*')
+      .select('id,date,split_day,session_exercises(exercise_id, exercises(name,muscle_group))')
       .eq('user_id', userId)
+      .eq('is_finished', true)
       .order('date', { ascending: false });
 
     if (error) throw error;
@@ -75,7 +77,7 @@ export async function generateInsights(userId: string): Promise<{ insights: Insi
     }
 
     // Imbalance Insight (Using split strings)
-    const legSessions = recentSessions.filter(s => s.split?.toLowerCase().includes('leg')).length;
+    const legSessions = recentSessions.filter(s => s.split_day?.toLowerCase().includes('leg')).length;
     const totalSessions = recentSessions.length;
     const legRatio = totalSessions > 0 ? legSessions / totalSessions : 0;
 
@@ -171,7 +173,7 @@ export async function generateInsights(userId: string): Promise<{ insights: Insi
     if (recentSessions.length > 0) {
       // Determine the split of the most recent session
       const lastSession = recentSessions[0];
-      const lastSplit = lastSession.split?.toLowerCase() || 'custom';
+      const lastSplit = lastSession.split_day?.toLowerCase() || 'custom';
       
       let nextSplit = 'Full Body';
       let focus = 'General Conditioning';
@@ -218,7 +220,9 @@ export async function generateInsights(userId: string): Promise<{ insights: Insi
         focus = 'Recovery & Mobility';
       }
 
-      nextWorkout = { split: nextSplit, focus, reason };
+      const matchingSession = sessions.find((session) => (session.split_day || '').toLowerCase().includes(nextSplit.toLowerCase().split(' ')[0]));
+      const exercises = matchingSession?.session_exercises?.map((entry: any) => entry.exercises?.name).filter(Boolean).slice(0, 8) || [];
+      nextWorkout = { split: nextSplit, focus, reason, exercises };
     }
 
   } catch (err) {

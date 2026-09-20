@@ -3,6 +3,7 @@ import { Stack as ExpoStack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { View, ActivityIndicator } from 'react-native';
 import { initDb } from '../lib/db';
+import { processOutbox } from '../lib/sync';
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
@@ -20,6 +21,10 @@ function RootLayoutNav() {
       router.replace('/(tabs)/');
     }
   }, [user, isLoading, segments]);
+
+  useEffect(() => {
+    if (user) processOutbox(user.id).catch(() => undefined);
+  }, [user?.id]);
 
   if (isLoading) {
     return (

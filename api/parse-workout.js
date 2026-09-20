@@ -9,6 +9,9 @@
 
 import OpenAI from 'openai';
 import { authenticate } from './_auth.js';
+import { setCors, isJsonRequest } from './_http.js';
+import { allowRequest } from './_rate-limit.js';
+import { validateWorkoutParse } from './_validation.js';
 
 const MAX_INPUT_CHARS = 12_000;
 
@@ -376,25 +379,21 @@ function fallbackRegexParser(rawText) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST' && req.method !== 'OPTIONS') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCors(req, res, 'POST, OPTIONS');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return res.status(204).end();
   }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { user, error: authError } = await authenticate(req);
   if (authError) {
     return res.status(401).json({ error: authError });
   }
+  const rate = allowRequest('parse-workout', user.id, 15, 60_000);
+  if (!rate.allowed) { res.setHeader('Retry-After', String(rate.retryAfterSeconds)); return res.status(429).json({ error: 'Too many import requests. Try again shortly.' }); }
 
-  const contentType = req.headers['content-type'] || '';
-  if (!contentType.includes('application/json')) {
+  if (!isJsonRequest(req)) {
     return res.status(400).json({ error: 'Invalid Content-Type. Must be application/json' });
   }
 
@@ -402,7 +401,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Malformed payload: Request body is not a valid JSON object' });
   }
 
-  const { rawText, exercises } = req.body;
+  const { rawText } = req.body;
 
   if (rawText === undefined || rawText === null) {
     return res.status(400).json({ error: 'Missing required field: rawText' });
@@ -426,8 +425,7 @@ export default async function handler(req, res) {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
     console.error('[AI_IMPORT] NVIDIA_API_KEY is not configured on the server. Falling back to local regex parser.');
-    const fallbackParsed = fallbackRegexParser(normalizedRaw);
-    return res.status(200).json(fallbackParsed);
+    return res.status(200).json(validateWorkoutParse(fallbackRegexParser(normalizedRaw)) || { date: null, split: 'Custom', exercises: [], ambiguous: [] });
   }
 
   try {
@@ -437,10 +435,6 @@ export default async function handler(req, res) {
     });
 
     let userContent = `Parse this raw workout log:\n\n${normalizedRaw}`;
-    if (exercises && Array.isArray(exercises) && exercises.length > 0) {
-      const sample = exercises.slice(0, 200).join(', ');
-      userContent += `\n\nKnown exercises database names:\n${sample}`;
-    }
 
     let attempt = 1;
     let parsed = null;
@@ -502,10 +496,11 @@ export default async function handler(req, res) {
       parsed.exercises = applyFuzzyExerciseResolution(parsed.exercises, parsed.split);
     }
 
-    return res.status(200).json(parsed);
+    const validated = validateWorkoutParse(parsed);
+    if (!validated) return res.status(502).json({ error: 'Workout parser returned an invalid response.' });
+    return res.status(200).json(validated);
   } catch (err) {
     console.error('[AI_IMPORT] Severe parser exception, executing regex fallback:', err.message);
-    const parsed = fallbackRegexParser(normalizedRaw);
-    return res.status(200).json(parsed);
+    return res.status(200).json(validateWorkoutParse(fallbackRegexParser(normalizedRaw)) || { date: null, split: 'Custom', exercises: [], ambiguous: [] });
   }
 }

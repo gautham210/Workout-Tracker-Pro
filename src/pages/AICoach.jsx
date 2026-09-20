@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { authenticatedApiPost } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import {
   Sparkles, Send, Loader2, ArrowRight, Check,
@@ -11,28 +12,28 @@ function AICoach() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
-  const [messages, setMessages]   = useState(() => {
-    try {
-      const cached = localStorage.getItem('wtp_coach_chat_history');
-      if (cached) return JSON.parse(cached);
-    } catch (e) {}
-    return [
-      {
-        role:    'assistant',
-        content: "Hello! I am your AI Gym Coach. I have analyzed your fitness context and database history.\n\nAsk me anything about your splits, suggestions for progressive overload, recovery gaps, or high-protein macro targets!",
-      }
-    ];
-  });
+  const welcomeMessage = { role: 'assistant', content: 'Hello! I am your AI Gym Coach. Ask about training, recovery, form, or progression.' };
+  const [messages, setMessages]   = useState([welcomeMessage]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading]     = useState(false);
   const [applying, setApplying]   = useState(false);
 
-  // Cache the chat history locally on every message state update
+  // Chat history is scoped to the authenticated account; it is never shared
+  // with the next person who signs in on this browser.
   useEffect(() => {
+    if (!user?.id) { setMessages([welcomeMessage]); return; }
     try {
-      localStorage.setItem('wtp_coach_chat_history', JSON.stringify(messages));
+      const cached = localStorage.getItem(`wtp_coach_chat_history_${user.id}`);
+      setMessages(cached ? JSON.parse(cached) : [welcomeMessage]);
+    } catch { setMessages([welcomeMessage]); }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(`wtp_coach_chat_history_${user.id}`, JSON.stringify(messages.slice(-24)));
     } catch (e) {}
-  }, [messages]);
+  }, [messages, user?.id]);
 
   // Training Context gathered from Supabase
   const [context, setContext] = useState(null);
@@ -156,7 +157,7 @@ function AICoach() {
     // 1. Check prompt/response cache in localStorage with 1-hour TTL
     try {
       const cleanPrompt = promptText.toLowerCase().trim();
-      const rawCache = localStorage.getItem('wtp_coach_chat_cache');
+      const rawCache = user?.id ? localStorage.getItem(`wtp_coach_chat_cache_${user.id}`) : null;
       const cacheMap = rawCache ? JSON.parse(rawCache) : {};
       const cachedItem = cacheMap[cleanPrompt];
 
@@ -185,24 +186,11 @@ function AICoach() {
       }, 9000); // 9000ms AbortController timeout
 
       try {
-        const res = await fetch('/api/ai-chat', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal:  controller.signal,
-          body:    JSON.stringify({
-            messages: [...messages, userMessage],
-            context
-          })
-        });
+        const response = await authenticatedApiPost('/api/ai-chat', { messages: [...messages, userMessage].slice(-12) }, { signal: controller.signal });
 
         clearTimeout(abortTimeout);
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ?? `Server error (${res.status})`);
-        }
-
-        data = await res.json();
+        data = response;
         success = true;
       } catch (err) {
         clearTimeout(abortTimeout);
@@ -222,14 +210,14 @@ function AICoach() {
       // Store response inside prompt cache
       try {
         const cleanPrompt = promptText.toLowerCase().trim();
-        const rawCache = localStorage.getItem('wtp_coach_chat_cache');
+        const rawCache = localStorage.getItem(`wtp_coach_chat_cache_${user.id}`);
         const cacheMap = rawCache ? JSON.parse(rawCache) : {};
         cacheMap[cleanPrompt] = {
           response: data.text,
           intent: data.intent,
           timestamp: Date.now()
         };
-        localStorage.setItem('wtp_coach_chat_cache', JSON.stringify(cacheMap));
+        localStorage.setItem(`wtp_coach_chat_cache_${user.id}`, JSON.stringify(cacheMap));
       } catch (e) {}
     } else {
       console.error('[AI_CHAT] All retry attempts exhausted:', lastError?.message);
@@ -324,7 +312,7 @@ function AICoach() {
         sessionExercises: builtExercises
       };
 
-      localStorage.setItem('wtp_workout_draft_v2', JSON.stringify(draft));
+      localStorage.setItem(`wtp_workout_draft_v2_${user.id}`, JSON.stringify(draft));
       localStorage.removeItem('wtp_active_scroll'); // clear scroll
 
       // Redirect immediately to workout active page

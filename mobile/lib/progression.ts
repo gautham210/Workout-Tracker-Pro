@@ -1,132 +1,50 @@
-/**
- * Calculate estimated 1 Rep Max (e1RM) using the Brzycki Formula.
- * If RIR is provided, we treat it as extra reps left in the tank.
- * E.g., 100kg x 8 reps @ 2 RIR is equivalent to 100kg x 10 reps to failure.
- */
+export interface SetData { id: string; date: string; exercise_id: string; session_id?: string; weight_kg: number; reps: number; rir?: number | null; rpe?: number | null; }
+export interface PRData extends SetData { prType: 'e1RM' | 'weight' | 'reps' | 'volume'; }
+
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/** Brzycki is used for low reps; Epley avoids its high-rep singularity. */
 export function calculateE1RM(weight: number, reps: number, rir?: number | null): number {
-  if (!weight || !reps || reps < 1) return 0;
-  
-  const effectiveReps = rir !== undefined && rir !== null ? reps + rir : reps;
-  
-  // Brzycki Formula: weight * (36 / (37 - reps))
-  // Best for reps < 10, but widely used.
-  if (effectiveReps >= 37) return weight; // Prevent division by zero or negative
-  
-  return weight * (36 / (37 - effectiveReps));
+  if (!finite(weight) || !finite(reps) || weight <= 0 || reps <= 0) return 0;
+  const effectiveReps = Math.min(50, reps + (finite(rir) ? Math.max(0, Math.min(10, rir)) : 0));
+  const result = effectiveReps <= 10 ? weight * (36 / (37 - effectiveReps)) : weight * (1 + effectiveReps / 30);
+  return Number.isFinite(result) && result >= 0 ? result : 0;
 }
 
-export interface SetData {
-  id: string;
-  date: string;
-  exercise_id: string;
-  weight_kg: number;
-  reps: number;
-  rir?: number;
-  rpe?: number;
-}
-
-export interface PRData extends SetData {
-  prType: 'e1RM' | 'weight' | 'reps' | 'volume';
-}
-
-/**
- * Detects PRs (Personal Records) based on e1RM, weight, reps at weight, and volume.
- */
 export function detectPRs(sets: SetData[]): PRData[] {
   const prs: PRData[] = [];
-  let maxE1RM = 0;
-  let maxWeight = 0;
-  let maxVolume = 0;
-  const maxRepsAtWeight: Record<number, number> = {};
-  
-  // Sort chronologically (oldest first)
-  const sorted = [...sets].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  
+  const sorted = sets.filter((set) => finite(set.weight_kg) && finite(set.reps) && set.weight_kg >= 0 && set.reps > 0 && Number.isFinite(Date.parse(set.date))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  let maxE1RM = 0; let maxWeight = 0; let maxVolume = 0;
+  const maxRepsAtWeight = new Map<number, number>();
   for (const set of sorted) {
     const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rir);
     const volume = set.weight_kg * set.reps;
-    
-    let isPR = false;
-    let prType: 'e1RM' | 'weight' | 'reps' | 'volume' = 'e1RM';
-
-    if (e1rm > maxE1RM) {
-      maxE1RM = e1rm;
-      isPR = true;
-      prType = 'e1RM';
-    } else if (set.weight_kg > maxWeight) {
-      maxWeight = set.weight_kg;
-      isPR = true;
-      prType = 'weight';
-    } else if (volume > maxVolume) {
-      maxVolume = volume;
-      isPR = true;
-      prType = 'volume';
-    } else {
-      const prevMaxReps = maxRepsAtWeight[set.weight_kg] || 0;
-      if (set.reps > prevMaxReps) {
-        isPR = true;
-        prType = 'reps';
-      }
-    }
-    
-    // Update trackers
-    if (set.weight_kg > maxWeight) maxWeight = set.weight_kg;
-    if (volume > maxVolume) maxVolume = volume;
-    if (!maxRepsAtWeight[set.weight_kg] || set.reps > maxRepsAtWeight[set.weight_kg]) {
-      maxRepsAtWeight[set.weight_kg] = set.reps;
-    }
-
-    if (isPR) {
-      prs.push({ ...set, prType });
-    }
+    let prType: PRData['prType'] | null = null;
+    if (e1rm > maxE1RM) prType = 'e1RM';
+    else if (set.weight_kg > maxWeight) prType = 'weight';
+    else if (set.reps > (maxRepsAtWeight.get(set.weight_kg) ?? 0)) prType = 'reps';
+    else if (volume > maxVolume) prType = 'volume';
+    maxE1RM = Math.max(maxE1RM, e1rm); maxWeight = Math.max(maxWeight, set.weight_kg); maxVolume = Math.max(maxVolume, volume);
+    maxRepsAtWeight.set(set.weight_kg, Math.max(maxRepsAtWeight.get(set.weight_kg) ?? 0, set.reps));
+    if (prType) prs.push({ ...set, prType });
   }
-  
   return prs;
 }
 
-const PLATEAU_TOLERANCE_MULTIPLIER = 1.02; // 2% improvement threshold
-
-/**
- * Plateau Heuristic: Checks both a 30-day window and a 4-comparable-sessions window.
- * Returns true if a "Possible plateau" is detected.
- */
+/** Conservative heuristic: four distinct sessions across at least 21 days. */
 export function isPlateauing(sets: SetData[]): boolean {
-  if (sets.length < 4) return false;
-
-  // Sort chronological
-  const sorted = [...sets].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  
-  // 1. Last 4 comparable sessions heuristic
-  // We compare the max e1RM of the most recent 2 sessions against the 2 sessions prior to those.
-  const last4 = sorted.slice(-4);
-  const older2 = last4.slice(0, 2);
-  const newer2 = last4.slice(2, 4);
-
-  const older2Max = Math.max(...older2.map(s => calculateE1RM(s.weight_kg, s.reps, s.rir)));
-  const newer2Max = Math.max(...newer2.map(s => calculateE1RM(s.weight_kg, s.reps, s.rir)));
-
-  if (newer2Max <= older2Max * PLATEAU_TOLERANCE_MULTIPLIER) {
-    return true; // Possible plateau
+  const bySession = new Map<string, { time: number; best: number }>();
+  for (const set of sets) {
+    const time = Date.parse(set.date); const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rir);
+    if (!Number.isFinite(time) || e1rm <= 0) continue;
+    const key = set.session_id || set.date.slice(0, 10);
+    const previous = bySession.get(key);
+    if (!previous || e1rm > previous.best) bySession.set(key, { time, best: e1rm });
   }
-
-  // 2. 30 vs 60 days heuristic (Volume/Consistency approach)
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
-  
-  const recentSets = sorted.filter(s => new Date(s.date).getTime() >= thirtyDaysAgo);
-  const previousSets = sorted.filter(s => {
-    const t = new Date(s.date).getTime();
-    return t >= sixtyDaysAgo && t < thirtyDaysAgo;
-  });
-
-  if (recentSets.length >= 3 && previousSets.length >= 2) {
-    const recentMax = Math.max(...recentSets.map(s => calculateE1RM(s.weight_kg, s.reps, s.rir)));
-    const previousMax = Math.max(...previousSets.map(s => calculateE1RM(s.weight_kg, s.reps, s.rir)));
-
-    if (recentMax <= previousMax * PLATEAU_TOLERANCE_MULTIPLIER) {
-      return true; // Possible plateau
-    }
-  }
-
-  return false;
+  const sessions = [...bySession.values()].sort((a, b) => a.time - b.time);
+  if (sessions.length < 4 || sessions[sessions.length - 1].time - sessions[sessions.length - 4].time < 21 * 86_400_000) return false;
+  const lastFour = sessions.slice(-4);
+  const oldBest = Math.max(lastFour[0].best, lastFour[1].best);
+  const recentBest = Math.max(lastFour[2].best, lastFour[3].best);
+  return recentBest < oldBest * 1.02;
 }

@@ -32,25 +32,25 @@ const SPLITS_MAP = {
 const SPLIT_KEYS = ["PPL", "Bro Split", "Upper / Lower", "Full Body"];
 
 // ── localStorage keys ─────────────────────────────────────────────────────────
-const DRAFT_KEY  = 'wtp_workout_draft_v2';
 const DRAFT_TTL  = 24 * 60 * 60 * 1000; // 24 hours
+const draftKey = (userId) => `wtp_workout_draft_v2_${userId}`;
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
 function saveDraft(userId, state) {
   try {
     const draft = { userId, savedAt: Date.now(), ...state };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    localStorage.setItem(draftKey(userId), JSON.stringify(draft));
   } catch { /* storage full */ }
 }
 
 function loadDraft(userId) {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(draftKey(userId));
     if (!raw) return null;
     const draft = JSON.parse(raw);
     if (draft.userId !== userId) return null; // different user
     if (Date.now() - draft.savedAt > DRAFT_TTL) {
-      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(draftKey(userId));
       return null; // expired
     }
     return draft;
@@ -59,9 +59,9 @@ function loadDraft(userId) {
   }
 }
 
-function clearDraft() {
+function clearDraft(userId) {
   try { 
-    localStorage.removeItem(DRAFT_KEY); 
+    if (userId) localStorage.removeItem(draftKey(userId));
     localStorage.removeItem('wtp_active_scroll');
   } catch { /* ignore */ }
 }
@@ -154,7 +154,7 @@ export default function WorkoutActive() {
   const autosave = useCallback(() => {
     if (!user) return;
     if (sessionExercises.length === 0) {
-      clearDraft();
+      clearDraft(user.id);
       return;
     }
     clearTimeout(autosaveTimerRef.current);
@@ -439,87 +439,33 @@ export default function WorkoutActive() {
     const [y, m, d]     = workoutDate.split('-').map(Number);
     const sessionDateISO = new Date(y, m - 1, d, 12, 0, 0).toISOString();
 
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('workout_sessions')
-      .insert({ user_id: user.id, date: sessionDateISO, split_type: splitType, split_day: splitDay, notes: '' })
-      .select()
-      .single();
-
-    if (sessionError || !sessionData) {
-      setSaveError(sessionError?.message ?? 'Failed to save session.');
+    const completedExercises = sessionExercises.flatMap((item, exerciseIndex) => {
+      const sets = item.sets.flatMap((set, setIndex) => {
+        const weight = Number(set.weight_kg);
+        const reps = Number(set.reps);
+        if (!set.completed || !Number.isFinite(weight) || weight < 0 || weight > 1000 || !Number.isInteger(reps) || reps < 1 || reps > 500) return [];
+        return [{ id: crypto.randomUUID(), set_number: setIndex + 1, weight_kg: weight, reps, completed: true, rpe: null, rir: null }];
+      });
+      return sets.length && item.exercise?.id ? [{ id: crypto.randomUUID(), exercise_id: item.exercise.id, order_index: exerciseIndex, sets }] : [];
+    });
+    if (!completedExercises.length) {
+      setSaveError('Complete at least one set with a valid weight and rep count before finishing.');
+      setSaving(false);
+      return;
+    }
+    const totalVol = completedExercises.flatMap((exercise) => exercise.sets).reduce((sum, set) => sum + set.weight_kg * set.reps, 0);
+    const totalSetsCount = completedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
+    const graph = { id: crypto.randomUUID(), date: sessionDateISO, split_type: splitType, split_day: splitDay, notes: '', duration_minutes: null, is_finished: true, exercises: completedExercises };
+    const { error: saveError } = await supabase.rpc('sync_workout_graph', { p_workout: graph });
+    if (saveError) {
+      setSaveError(saveError.message || 'Failed to save workout. Nothing was recorded.');
       setSaving(false);
       return;
     }
 
-    let totalVol = 0, totalSetsCount = 0;
-    let prsFound = [];
+    clearDraft(user.id);
 
-    for (let i = 0; i < sessionExercises.length; i++) {
-      const item = sessionExercises[i];
-      let currentExVol = 0, currentMaxW = 0, currentMaxRAtW = 0;
-
-      // Filter only sets that are filled and checked
-      const validSets = item.sets.filter(s => s.reps !== '');
-      if (validSets.length === 0) continue;
-
-      validSets.forEach(s => {
-        const w = parseFloat(s.weight_kg) || 0;
-        const r = parseInt(s.reps, 10) || 0;
-        currentExVol   += w * r;
-        totalVol       += w * r;
-        totalSetsCount++;
-        if (w > currentMaxW)                            { currentMaxW = w; currentMaxRAtW = r; }
-        else if (w === currentMaxW && r > currentMaxRAtW) { currentMaxRAtW = r; }
-      });
-
-      const { data: pastExData } = await supabase
-        .from('session_exercises')
-        .select('sets(weight_kg, reps), workout_sessions!inner(user_id, date)')
-        .eq('workout_sessions.user_id', user.id)
-        .eq('exercise_id', item.exercise.id)
-        .order('workout_sessions.date', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (pastExData?.sets?.length > 0) {
-        let pastVol = 0, pastMaxW = 0, pastMaxRAtW = 0;
-        pastExData.sets.forEach(ps => {
-          const pw = parseFloat(ps.weight_kg) || 0;
-          const pr = parseInt(ps.reps) || 0;
-          pastVol += pw * pr;
-          if (pw > pastMaxW) { pastMaxW = pw; pastMaxRAtW = pr; }
-          else if (pw === pastMaxW && pr > pastMaxRAtW) { pastMaxRAtW = pr; }
-        });
-        if (currentMaxW > pastMaxW) {
-          prsFound.push({ exercise: item.exercise.name, type: 'STR', val: `+${(currentMaxW - pastMaxW).toFixed(1)}kg` });
-        } else if (currentMaxW === pastMaxW && currentMaxRAtW > pastMaxRAtW) {
-          prsFound.push({ exercise: item.exercise.name, type: 'REP', val: `+${currentMaxRAtW - pastMaxRAtW} reps` });
-        } else if (currentExVol > pastVol) {
-          prsFound.push({ exercise: item.exercise.name, type: 'VOL', val: `+${Math.round(currentExVol - pastVol)}kg vol` });
-        }
-      }
-
-      const { data: seData } = await supabase
-        .from('session_exercises')
-        .insert({ session_id: sessionData.id, exercise_id: item.exercise.id, order_index: i })
-        .select()
-        .single();
-
-      if (seData) {
-        await supabase.from('sets').insert(
-          validSets.map((s, idx) => ({
-            session_exercise_id: seData.id,
-            set_number:          idx + 1,
-            weight_kg:           s.weight_kg ? parseFloat(s.weight_kg) : 0,
-            reps:                parseInt(s.reps, 10) || 0,
-          }))
-        );
-      }
-    }
-
-    clearDraft();
-
-    setCompletionData({ vol: totalVol, sets: totalSetsCount, prs: prsFound });
+    setCompletionData({ vol: totalVol, sets: totalSetsCount, prs: [] });
     setSaving(false);
     setIsCompleteMode(true);
   };
@@ -734,7 +680,7 @@ export default function WorkoutActive() {
                     setSessionExercises([]);
                     setSessionStarted(false);
                     setCompletedSetsCount(0);
-                    clearDraft();
+                    clearDraft(user?.id);
                     setSplitDay(effectiveDays[0] || 'Push');
                   }
                 }}

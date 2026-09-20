@@ -1,6 +1,6 @@
 # Workout Tracker Pro 💪
 
-A modern AI-powered workout and bodyweight tracking app built with React and Supabase.
+A React web app and Expo mobile app for workout and bodyweight tracking, backed by Supabase.
 
 ## 🚀 Features
 
@@ -11,8 +11,8 @@ A modern AI-powered workout and bodyweight tracking app built with React and Sup
 - Loop-based workout system (auto-rotating sessions)
 - Workout logging with sets, reps, and weight tracking
 - Bodyweight tracking with date-based logs
-- Intelligent Next Session suggestions
-- Real analytics (volume, frequency, strongest lifts)
+- Deterministic next-session and insight heuristics based on recorded data
+- Offline mobile workout persistence with a durable sync outbox
 
 ## 🧠 Smart System
 
@@ -24,14 +24,16 @@ Workout Tracker Pro:
 
 ## 🛠 Tech Stack
 
-- React (Vite)
+- React (Vite) and Expo React Native
 - Supabase (Auth + PostgreSQL + RLS)
-- Tailwind CSS
+- Vercel serverless AI routes
 
 ## ⚡ Local Setup
 
 npm install  
 npm run dev  
+
+For the security, schema, offline-sync, environment, and validation contract, read [PRODUCTION_NOTES.md](./PRODUCTION_NOTES.md). Remote Supabase migration/RLS and production deployment are not verified by this repository alone.
 
 ## 🌐 Deployment
 

@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAr
 import GlassCard from '../../components/GlassCard';
 import { Send, Bot, User, Sparkles } from 'lucide-react-native';
 import { sendChatMessage, ChatMessage } from '../../lib/api';
-import { buildAICoachContext } from '../../lib/ai-context';
 
 export default function CoachScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -22,14 +21,15 @@ export default function CoachScreen() {
     setMessages(newMessages);
     setLoading(true);
 
-    const context = await buildAICoachContext();
-
-    // Only send the last 10 messages to save bandwidth and prevent oversized payloads
-    const messagesToSent = newMessages.slice(-10);
-    const response = await sendChatMessage(messagesToSent, context, false);
-    
-    setMessages([...newMessages, { role: 'assistant', content: response.text }]);
-    setLoading(false);
+    try {
+      const response = await sendChatMessage(newMessages.slice(-10), null, false);
+      setMessages((current) => [...current, { role: 'assistant', content: response.text }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI Coach is temporarily unavailable.';
+      setMessages((current) => [...current, { role: 'assistant', content: `I couldn't complete that request: ${message}` }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

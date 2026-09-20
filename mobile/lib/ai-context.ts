@@ -5,15 +5,15 @@ import { calculateE1RM, detectPRs, isPlateauing } from './progression';
  * Builds a deterministic context based strictly on the user's actual local SQLite training history.
  * Does NOT invent data.
  */
-export async function buildAICoachContext(): Promise<any> {
+export async function buildAICoachContext(userId: string): Promise<any> {
   try {
     const db = await getDb();
     
     // 1. RECENT WORKOUTS & FREQUENCY (Last 14 days)
     const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
     const sessions = await db.getAllAsync<any>(
-      `SELECT * FROM workout_sessions WHERE is_finished = 1 AND date >= ? ORDER BY date DESC`,
-      [twoWeeksAgo]
+      `SELECT * FROM workout_sessions WHERE user_id = ? AND is_finished = 1 AND date >= ? ORDER BY date DESC`,
+      [userId, twoWeeksAgo]
     );
 
     const recentSessions = [];
@@ -40,8 +40,8 @@ export async function buildAICoachContext(): Promise<any> {
       if (sessionExercises.length > 0) {
         recentSessions.push({
           date: session.date,
-          split: session.split,
-          duration: session.duration,
+          split: session.split_day,
+          duration: session.duration_minutes,
           exercises: sessionExercises
         });
       }
@@ -63,9 +63,9 @@ export async function buildAICoachContext(): Promise<any> {
          JOIN session_exercises se ON s.session_exercise_id = se.id
          JOIN exercises e ON se.exercise_id = e.id
          JOIN workout_sessions ws ON se.session_id = ws.id
-         WHERE e.name = ? AND s.completed = 1 AND ws.date >= ?
+         WHERE e.name = ? AND ws.user_id = ? AND s.completed = 1 AND ws.date >= ?
          ORDER BY ws.date ASC`,
-        [exName, sixtyDaysAgo]
+        [exName, userId, sixtyDaysAgo]
       );
 
       if (setsRows.length > 0) {

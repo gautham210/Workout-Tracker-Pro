@@ -7,8 +7,8 @@ import HydrationAlert from '../components/HydrationAlert';
 import { Check, ArrowLeft, X } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import { getDb, generateUUID } from '../lib/db';
-import { queueSyncOperation } from '../lib/sync';
+import { getDb, generateUUID, upsertLocalExercises } from '../lib/db';
+import { queueCompletedWorkout, processOutbox } from '../lib/sync';
 
 const { width } = Dimensions.get('window');
 
@@ -32,9 +32,7 @@ export default function ActiveWorkoutScreen() {
   const [activeExerciseName, setActiveExerciseName] = useState('');
   const [completedSetsCount, setCompletedSetsCount] = useState(0);
 
-  useEffect(() => {
-    initWorkout();
-  }, [params.exercises, params.resumeSessionId]);
+  useEffect(() => { initWorkout().catch((error) => { console.warn('[workout] initialization failed', error); setLoading(false); }); }, [params.exercises, params.resumeSessionId, user?.id]);
 
   const initWorkout = async () => {
     if (!user) return;
@@ -44,13 +42,15 @@ export default function ActiveWorkoutScreen() {
     if (params.resumeSessionId) {
       // P0: Crash Recovery: Load existing session from SQLite
       const sessionId = params.resumeSessionId as string;
-      const sessionRow = await db.getFirstAsync<{ id: string, date: string }>(`SELECT * FROM workout_sessions WHERE id = ?`, [sessionId]);
+      const sessionRow = await db.getFirstAsync<{ id: string, date: string }>(
+        `SELECT * FROM workout_sessions WHERE id = ? AND user_id = ? AND is_finished = 0`, [sessionId, user.id],
+      );
       if (sessionRow) {
         setSession({ id: sessionRow.id, startTime: new Date(sessionRow.date).getTime() });
         
         // Load exercises
         const seRows = await db.getAllAsync<{id: string, exercise_id: string, name: string, muscle_group: string}>(
-          `SELECT se.id, se.exercise_id, e.name, e.muscle_group FROM session_exercises se LEFT JOIN exercises e ON se.exercise_id = e.id WHERE se.session_id = ?`,
+          `SELECT se.id, se.exercise_id, e.name, e.muscle_group FROM session_exercises se LEFT JOIN exercises e ON se.exercise_id = e.id WHERE se.session_id = ? ORDER BY se.order_index ASC`,
           [sessionId]
         );
         
@@ -59,7 +59,7 @@ export default function ActiveWorkoutScreen() {
 
         for (const se of seRows) {
           const setsRows = await db.getAllAsync<{id: string, weight_kg: number, reps: number, rpe: number, rir: number, completed: boolean}>(
-            `SELECT * FROM sets WHERE session_exercise_id = ?`, [se.id]
+            `SELECT * FROM sets WHERE session_exercise_id = ? ORDER BY set_number ASC`, [se.id]
           );
           
           const mappedSets = setsRows.map(s => {
@@ -93,22 +93,24 @@ export default function ActiveWorkoutScreen() {
         const parsed = JSON.parse(params.exercises as string);
         const sessionId = generateUUID();
         const dateIso = new Date().toISOString();
-        const startTime = new Date().getTime();
+        const startTime = new Date(dateIso).getTime();
         
         setSession({ id: sessionId, startTime });
         
         // P0: Durable Active Workout local write
+        await upsertLocalExercises(parsed.map((exercise: { id: string; name: string; muscle_group?: string }) => ({ id: exercise.id, name: exercise.name, muscle_group: exercise.muscle_group })));
         await db.runAsync(
-          `INSERT INTO workout_sessions (id, user_id, date, duration, split, is_finished) VALUES (?, ?, ?, ?, ?, ?)`,
-          [sessionId, user.id, dateIso, 0, 'Custom', 0]
+          `INSERT INTO workout_sessions (id, user_id, date, split_type, split_day, duration_minutes, is_finished, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          [sessionId, user.id, dateIso, 'custom', 'Custom', 0, dateIso, dateIso]
         );
         
         const initEx: ExerciseModel[] = [];
-        for (const ex of parsed) {
+        for (const [exerciseIndex, ex] of parsed.entries()) {
           const seId = generateUUID();
           await db.runAsync(
-            `INSERT INTO session_exercises (id, session_id, exercise_id) VALUES (?, ?, ?)`,
-            [seId, sessionId, ex.id]
+            `INSERT INTO session_exercises (id, session_id, exercise_id, order_index) VALUES (?, ?, ?, ?)`,
+            [seId, sessionId, ex.id, exerciseIndex]
           );
           
           const sets: SetModel[] = [];
@@ -116,8 +118,8 @@ export default function ActiveWorkoutScreen() {
           for (let i = 0; i < 3; i++) {
             const setId = generateUUID();
             await db.runAsync(
-              `INSERT INTO sets (id, session_exercise_id, weight_kg, reps, completed) VALUES (?, ?, ?, ?, ?)`,
-              [setId, seId, null, null, 0]
+              `INSERT INTO sets (id, session_exercise_id, set_number, weight_kg, reps, completed) VALUES (?, ?, ?, ?, ?, 0)`,
+              [setId, seId, i + 1, null, null]
             );
             sets.push({ id: setId, weight_kg: '', reps: '', completed: false });
           }
@@ -141,18 +143,13 @@ export default function ActiveWorkoutScreen() {
     setLoading(false);
   };
 
-  const toggleSet = async (exIndex: number, setIndex: number) => {
-    const updated = [...exercises];
-    const targetSet = updated[exIndex].sets[setIndex];
-    
-    targetSet.completed = !targetSet.completed;
-    
-    // P0: Write set updates immediately to local SQLite and sync queue
+  const persistSet = async (targetSet: SetModel, setNumber: number) => {
     try {
       const db = await getDb();
       await db.runAsync(
-        `UPDATE sets SET completed = ?, weight_kg = ?, reps = ?, rpe = ?, rir = ? WHERE id = ?`,
+        `UPDATE sets SET set_number = ?, completed = ?, weight_kg = ?, reps = ?, rpe = ?, rir = ? WHERE id = ?`,
         [
+          setNumber,
           targetSet.completed ? 1 : 0, 
           targetSet.weight_kg ? parseFloat(targetSet.weight_kg) : null,
           targetSet.reps ? parseInt(targetSet.reps) : null,
@@ -161,20 +158,20 @@ export default function ActiveWorkoutScreen() {
           targetSet.id
         ]
       );
-      
-      // P0: Queue set update to outbox immediately (durable offline)
-      queueSyncOperation('sets', 'UPSERT', {
-        id: targetSet.id,
-        session_exercise_id: updated[exIndex].session_exercise_id,
-        weight_kg: targetSet.weight_kg ? parseFloat(targetSet.weight_kg) : null,
-        reps: targetSet.reps ? parseInt(targetSet.reps) : null,
-        rpe: targetSet.rpe ? parseInt(targetSet.rpe) : null,
-        rir: targetSet.rir ? parseInt(targetSet.rir) : null,
-      });
-
     } catch (e) {
       console.error('Failed to update local DB:', e);
     }
+  };
+
+  const toggleSet = async (exIndex: number, setIndex: number) => {
+    const updated = exercises.map((exercise) => ({ ...exercise, sets: exercise.sets.map((set) => ({ ...set })) }));
+    const targetSet = updated[exIndex].sets[setIndex];
+    if (!targetSet.completed && (!Number.isFinite(Number(targetSet.weight_kg)) || Number(targetSet.weight_kg) < 0 || !Number.isInteger(Number(targetSet.reps)) || Number(targetSet.reps) < 1)) {
+      Alert.alert('Complete the set details', 'Enter a valid weight and at least one rep before marking a set complete.');
+      return;
+    }
+    targetSet.completed = !targetSet.completed;
+    await persistSet(targetSet, setIndex + 1);
 
     if (targetSet.completed) {
       setTimerTrigger(prev => prev + 1);
@@ -205,29 +202,28 @@ export default function ActiveWorkoutScreen() {
     try {
       const duration = Math.max(1, Math.round((new Date().getTime() - session.startTime) / 60000));
       const db = await getDb();
-      
-      // Mark finished in local DB
-      await db.runAsync(`UPDATE workout_sessions SET is_finished = 1, duration = ? WHERE id = ?`, [duration, session.id]);
-      
-      // Queue Session Upsert
-      queueSyncOperation('workout_sessions', 'UPSERT', {
-        id: session.id,
-        user_id: user.id,
-        date: new Date(session.startTime).toISOString(),
-        duration,
-        split: 'Custom'
-      });
-      
-      // Queue Session_Exercises Upsert
-      for (const ex of exercises) {
-        queueSyncOperation('session_exercises', 'UPSERT', {
-          id: ex.session_exercise_id,
-          session_id: session.id,
-          exercise_id: ex.id
-        });
+      const completedExercises = exercises.map((exercise, exerciseIndex) => ({
+        id: exercise.session_exercise_id, exercise_id: exercise.id, order_index: exerciseIndex,
+        sets: exercise.sets.filter((set) => set.completed).map((set, setIndex) => ({
+          id: set.id, set_number: setIndex + 1, weight_kg: Number(set.weight_kg), reps: Number(set.reps),
+          completed: true, rpe: set.rpe ? Number(set.rpe) : null, rir: set.rir ? Number(set.rir) : null,
+        })),
+      })).filter((exercise) => exercise.sets.length > 0);
+      if (!completedExercises.length) {
+        Alert.alert('No completed sets', 'Complete at least one valid set before finishing your workout.');
+        setIsFinishing(false);
+        return;
       }
-      
-      Alert.alert('Success', 'Workout finished and queued for sync!');
+      const workout = { id: session.id, date: new Date(session.startTime).toISOString(), split_type: 'custom', split_day: 'Custom', duration_minutes: duration, is_finished: true, exercises: completedExercises };
+      await db.withTransactionAsync(async () => {
+        for (const exercise of exercises) {
+          for (const [setIndex, set] of exercise.sets.entries()) await persistSet(set, setIndex + 1);
+        }
+        await db.runAsync(`UPDATE workout_sessions SET is_finished = 1, duration_minutes = ?, updated_at = ? WHERE id = ? AND user_id = ?`, [duration, new Date().toISOString(), session.id, user.id]);
+        await queueCompletedWorkout(user.id, workout);
+      });
+      processOutbox(user.id).catch(() => undefined);
+      Alert.alert('Saved locally', 'Your workout is safely saved on this device and will sync when the connection succeeds.');
       router.replace('/(tabs)/history');
     } catch (err: any) {
       Alert.alert('Error', err.message);
@@ -293,6 +289,7 @@ export default function ActiveWorkoutScreen() {
                       }
                       setExercises(updated);
                     }}
+                    onBlur={() => { persistSet(set, setIndex + 1).catch(() => undefined); }}
                   />
                   
                   <TextInput 
@@ -310,6 +307,7 @@ export default function ActiveWorkoutScreen() {
                       }
                       setExercises(updated);
                     }}
+                    onBlur={() => { persistSet(set, setIndex + 1).catch(() => undefined); }}
                   />
 
                   {/* P1: Optional RPE/RIR fields with validation */}
@@ -329,6 +327,7 @@ export default function ActiveWorkoutScreen() {
                       }
                       setExercises(updated);
                     }}
+                    onBlur={() => { persistSet(set, setIndex + 1).catch(() => undefined); }}
                   />
 
                   <TextInput 
@@ -347,6 +346,7 @@ export default function ActiveWorkoutScreen() {
                       }
                       setExercises(updated);
                     }}
+                    onBlur={() => { persistSet(set, setIndex + 1).catch(() => undefined); }}
                   />
                   
                   <TouchableOpacity 

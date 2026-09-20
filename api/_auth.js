@@ -6,6 +6,13 @@ const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.EXPO_PUBLI
 // It is safe to use the anon key for verifying JWTs because we are just asking Supabase to decode and validate it.
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+/** RLS-bound database client for the already verified bearer token. */
+export function authenticatedDatabaseClient(req) {
+  return createClient(supabaseUrl, supabaseKey, {
+    global: { headers: { Authorization: req.headers.authorization } },
+  });
+}
+
 /**
  * Validates the Authorization header and returns the user object.
  * Returns { user: null, error: ... } if invalid.

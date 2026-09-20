@@ -1,13 +1,15 @@
 {
   "expo": {
-    "name": "tmp_mobile",
-    "slug": "tmp_mobile",
+    "name": "Workout Tracker Pro",
+    "slug": "workout-tracker-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "scheme": "workouttrackerpro",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gautham210.workouttrackerpro"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,14 +18,16 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gautham210.workouttrackerpro"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      ["expo-image-picker", { "photosPermission": "Allow Workout Tracker Pro to select meal photos for analysis." }]
     ]
   }
 }

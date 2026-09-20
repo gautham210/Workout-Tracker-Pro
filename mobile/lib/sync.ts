@@ -1,107 +1,87 @@
-import { supabase } from './supabase';
 import { getDb } from './db';
-
-/**
- * Queues a mutation to be synced to Supabase later.
- * 
- * @param tableName 'workout_sessions', 'session_exercises', 'sets'
- * @param operation 'INSERT' or 'UPDATE'
- * @param payload The raw object to insert/update (should have an ID)
- */
-export async function queueSyncOperation(tableName: string, operation: string, payload: any) {
-  const db = await getDb();
-  await db.runAsync(
-    `INSERT OR REPLACE INTO sync_outbox (id, table_name, operation, payload, created_at, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
-    [payload.id, tableName, operation, JSON.stringify(payload), new Date().toISOString()]
-  );
-  
-  // Try to sync immediately (fire and forget)
-  processOutbox().catch(console.warn);
-}
+import { supabase } from './supabase';
 
 export type SyncStatus = 'Saved locally' | 'Syncing' | 'Synced' | 'Waiting for connection' | 'Sync failed / retrying';
+type Listener = (status: SyncStatus) => void;
+const listeners: Listener[] = [];
 let currentStatus: SyncStatus = 'Synced';
-const listeners: ((status: SyncStatus) => void)[] = [];
+let isSyncing = false;
 
-export function onSyncStatusChange(callback: (status: SyncStatus) => void) {
+export function onSyncStatusChange(callback: Listener) {
   listeners.push(callback);
   callback(currentStatus);
-  return () => {
-    const idx = listeners.indexOf(callback);
-    if (idx !== -1) listeners.splice(idx, 1);
-  };
+  return () => { const index = listeners.indexOf(callback); if (index >= 0) listeners.splice(index, 1); };
 }
 
 function updateStatus(status: SyncStatus) {
-  if (currentStatus !== status) {
-    currentStatus = status;
-    listeners.forEach(l => l(status));
-  }
+  if (currentStatus === status) return;
+  currentStatus = status;
+  listeners.forEach((listener) => listener(status));
 }
 
-export function getSyncStatus() {
-  return currentStatus;
+export const getSyncStatus = () => currentStatus;
+
+export async function queueCompletedWorkout(userId: string, workout: unknown) {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const id = `workout:${(workout as { id: string }).id}`;
+  await db.runAsync(
+    `INSERT INTO sync_outbox (id, user_id, operation, payload, status, attempts, last_error, next_attempt_at, created_at, updated_at)
+     VALUES (?, ?, 'sync_workout_graph', ?, 'pending', 0, NULL, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, status = 'pending', last_error = NULL, next_attempt_at = excluded.next_attempt_at, updated_at = excluded.updated_at`,
+    [id, userId, JSON.stringify(workout), now, now, now],
+  );
+  updateStatus('Saved locally');
 }
 
-let isSyncing = false;
+const retryDelayMs = (attempts: number) => Math.min(30 * 60_000, 15_000 * 2 ** Math.min(attempts, 7));
 
-export async function processOutbox() {
-  if (isSyncing) return;
+async function updateStatusForUser(userId: string) {
+  const db = await getDb();
+  const remaining = await db.getFirstAsync<{ pending: number; failed: number }>(
+    "SELECT SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed FROM sync_outbox WHERE user_id = ? AND status != 'synced'", [userId],
+  );
+  if ((remaining?.failed ?? 0) > 0) updateStatus('Sync failed / retrying');
+  else updateStatus((remaining?.pending ?? 0) > 0 ? 'Saved locally' : 'Synced');
+}
+
+/** One atomic RPC per completed workout gives deterministic parent-before-child persistence and idempotent retries. */
+export async function processOutbox(userId: string, force = false) {
+  if (!userId || isSyncing) return;
   isSyncing = true;
-  
   try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user || auth.user.id !== userId) { updateStatus('Waiting for connection'); return; }
     const db = await getDb();
-    const pendingOps = await db.getAllAsync<{id: string, table_name: string, operation: string, payload: string}>(
-      `SELECT * FROM sync_outbox WHERE status = 'pending' ORDER BY created_at ASC`
+    const now = new Date().toISOString();
+    const ops = await db.getAllAsync<{ id: string; payload: string; attempts: number }>(
+      `SELECT id, payload, attempts FROM sync_outbox
+       WHERE user_id = ? AND status IN ('pending','failed') AND (? = 1 OR next_attempt_at IS NULL OR next_attempt_at <= ?)
+       ORDER BY created_at ASC`, [userId, force ? 1 : 0, now],
     );
-    
-    if (pendingOps.length === 0) {
-      updateStatus('Synced');
-      isSyncing = false;
-      return;
-    }
-    
+    if (!ops.length) { await updateStatusForUser(userId); return; }
     updateStatus('Syncing');
-    
-    for (const op of pendingOps) {
+    for (const op of ops) {
       try {
         const payload = JSON.parse(op.payload);
-        
-        let error = null;
-        
-        if (op.operation === 'INSERT' || op.operation === 'UPSERT') {
-          // Use upsert to be duplicate-safe (idempotent)
-          const { error: err } = await supabase.from(op.table_name).upsert(payload);
-          error = err;
-        } else if (op.operation === 'UPDATE') {
-          const { error: err } = await supabase.from(op.table_name).update(payload).eq('id', payload.id);
-          error = err;
-        }
-        
-        if (error) {
-          // If it's a network error, we break and stop syncing the rest of the outbox to preserve order
-          console.error(`[SYNC] Failed to sync ${op.table_name} ${payload.id}:`, error.message);
-          updateStatus('Sync failed / retrying');
-          break;
-        } else {
-          // Success! Delete from outbox to prevent infinite growth
-          await db.runAsync(`DELETE FROM sync_outbox WHERE id = ?`, [op.id]);
-        }
-      } catch (e) {
-        console.error(`[SYNC] Corrupt payload for ${op.id}`, e);
-        await db.runAsync(`UPDATE sync_outbox SET status = 'failed' WHERE id = ?`, [op.id]);
+        const { error } = await supabase.rpc('sync_workout_graph', { p_workout: payload });
+        if (error) throw new Error(error.message);
+        await db.runAsync("UPDATE sync_outbox SET status = 'synced', last_error = NULL, updated_at = ? WHERE id = ? AND user_id = ?", [new Date().toISOString(), op.id, userId]);
+      } catch (error) {
+        const attempts = op.attempts + 1;
+        const message = error instanceof Error ? error.message.slice(0, 500) : 'Unknown sync error';
+        const nextAttempt = new Date(Date.now() + retryDelayMs(attempts)).toISOString();
+        await db.runAsync(
+          "UPDATE sync_outbox SET status = 'failed', attempts = ?, last_error = ?, next_attempt_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+          [attempts, message, nextAttempt, new Date().toISOString(), op.id, userId],
+        );
+        updateStatus('Sync failed / retrying');
       }
     }
-    
-    // Check if any pending ops left
-    const remainingOps = await db.getAllAsync<{id: string}>(`SELECT id FROM sync_outbox WHERE status = 'pending' LIMIT 1`);
-    if (remainingOps.length === 0) {
-      updateStatus('Synced');
-    }
-
-  } catch (err) {
-    console.error('[SYNC] Engine error', err);
-    updateStatus('Sync failed / retrying');
+    await updateStatusForUser(userId);
+  } catch (error) {
+    console.warn('[sync] engine error', error);
+    updateStatus('Waiting for connection');
   } finally {
     isSyncing = false;
   }

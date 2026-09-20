@@ -5,7 +5,7 @@ import GlassCard from '../../components/GlassCard';
 import { Activity, Flame, ChevronRight, Zap, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react-native';
 import { useAuth } from '../../lib/AuthContext';
 import { generateInsights, Insight } from '../../lib/insights';
-import { getDb, clearLocalDb } from '../../lib/db';
+import { getDb } from '../../lib/db';
 import { Alert } from 'react-native';
 
 export default function DashboardScreen() {
@@ -29,10 +29,11 @@ export default function DashboardScreen() {
   }, []);
 
   const checkUnfinishedSession = async () => {
+    if (!user) { setUnfinishedSessionId(null); return; }
     try {
       const db = await getDb();
       const row = await db.getFirstAsync<{ id: string }>(
-        `SELECT id FROM workout_sessions WHERE is_finished = 0 ORDER BY date DESC LIMIT 1`
+        `SELECT id FROM workout_sessions WHERE user_id = ? AND is_finished = 0 ORDER BY date DESC LIMIT 1`, [user.id]
       );
       setUnfinishedSessionId(row ? row.id : null);
     } catch (e) {
@@ -62,8 +63,8 @@ export default function DashboardScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: async () => {
         const db = await getDb();
-        if (unfinishedSessionId) {
-          await db.runAsync(`DELETE FROM workout_sessions WHERE id = ?`, [unfinishedSessionId]);
+        if (unfinishedSessionId && user) {
+          await db.runAsync(`DELETE FROM workout_sessions WHERE id = ? AND user_id = ? AND is_finished = 0`, [unfinishedSessionId, user.id]);
           setUnfinishedSessionId(null);
         }
       }}
@@ -86,7 +87,7 @@ export default function DashboardScreen() {
               style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
               onPress={() => {
                 if (syncStatus.includes('failed')) {
-                  import('../../lib/sync').then(({ processOutbox }) => processOutbox());
+                  if (user) import('../../lib/sync').then(({ processOutbox }) => processOutbox(user.id, true));
                 }
               }}
               disabled={!syncStatus.includes('failed')}

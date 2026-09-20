@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { clearUserLocalCaches } from '../lib/api';
 import {
   LogOut, Calendar as CalIcon, Activity, Check, Save,
   HardDrive, AlertCircle, Plus, X, Repeat, ChevronRight,
@@ -213,7 +214,10 @@ export default function Profile() {
     if (!error) { setActiveLoop(null); setLoopGenMsg(null); await refreshProfile(); }
   };
 
-  const handleLogout = () => supabase.auth.signOut();
+  const handleLogout = async () => {
+    if (user?.id) clearUserLocalCaches(user.id);
+    await supabase.auth.signOut();
+  };
 
   // ─── Derived ───────────────────────────────────────────────────────────────
   if (loading || !globalProfile) {

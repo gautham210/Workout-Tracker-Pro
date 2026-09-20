@@ -11,6 +11,7 @@ node_modules
 .env
 .env.local
 .env*.local
+mobile/.expo/
 dist
 dist-ssr
 *.local

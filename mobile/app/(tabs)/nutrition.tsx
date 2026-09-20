@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import GlassCard from '../../components/GlassCard';
 import { Send, Utensils, User, Camera, X } from 'lucide-react-native';
-import { sendChatMessage, ChatMessage, BACKEND_URL } from '../../lib/api';
+import { sendChatMessage, scanFoodImage, ChatMessage } from '../../lib/api';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function NutritionScreen() {
@@ -35,23 +35,12 @@ export default function NutritionScreen() {
 
     if (selectedImage) {
       try {
-        // Attempt to call a vision endpoint that would process the base64 image
-        const response = await fetch(`${BACKEND_URL}/api/parse-food`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUri: selectedImage })
-        });
-        
-        if (!response.ok) {
-          throw new Error('Vision API endpoint (/api/parse-food) is not implemented on the server.');
-        }
-        
-        const data = await response.json();
+        const data = await scanFoodImage(selectedImage);
         setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
       } catch (err: any) {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: `Error: ${err.message || 'Failed to process image.'} Please configure the Vision API endpoint.`
+          content: `I couldn't analyze that image: ${err.message || 'Please choose another image and try again.'}`
         }]);
       } finally {
         setLoading(false);
@@ -70,14 +59,20 @@ export default function NutritionScreen() {
   };
 
   const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.5,
+      base64: true,
     });
 
     if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (!asset.base64) return;
+      const mimeType = asset.mimeType === 'image/png' || asset.mimeType === 'image/webp' ? asset.mimeType : 'image/jpeg';
+      setSelectedImage(`data:${mimeType};base64,${asset.base64}`);
     }
   };
 

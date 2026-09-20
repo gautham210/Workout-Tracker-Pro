@@ -25,8 +25,9 @@ export default function HistoryScreen() {
     try {
       const { data: sessions, error } = await supabase
         .from('workout_sessions')
-        .select('id, date, split, duration, session_exercises(id, sets(weight_kg, reps))')
+        .select('id, date, split_day, duration_minutes, session_exercises(id, sets(weight_kg, reps, completed))')
         .eq('user_id', user.id)
+        .eq('is_finished', true)
         .order('date', { ascending: false })
         .limit(10);
         
@@ -35,7 +36,7 @@ export default function HistoryScreen() {
       const formattedHistory = (sessions || []).map(s => {
         let totalVolume = 0;
         s.session_exercises?.forEach((se: any) => {
-          se.sets?.forEach((set: any) => {
+          se.sets?.filter((set: any) => set.completed).forEach((set: any) => {
             const w = parseFloat(set.weight_kg) || 0;
             const r = parseInt(set.reps) || 0;
             totalVolume += (w * r);
@@ -45,17 +46,19 @@ export default function HistoryScreen() {
         return {
           id: s.id,
           date: new Date(s.date).toLocaleDateString(),
-          split: s.split || 'Workout',
+          split: s.split_day || 'Workout',
           volume: `${totalVolume} kg`,
-          duration: `${s.duration || 45} min`
+          duration: `${s.duration_minutes ?? '--'} min`
         };
       });
 
       setHistory(formattedHistory);
-      setStats({
-        volumeTrend: '+5%', // simplified for now
-        workoutsPerMonth: sessions?.length || 0
-      });
+      const volumes = formattedHistory.map((entry) => Number.parseFloat(entry.volume) || 0);
+      const midpoint = Math.floor(volumes.length / 2);
+      const newer = volumes.slice(0, midpoint).reduce((sum, value) => sum + value, 0);
+      const older = volumes.slice(midpoint).reduce((sum, value) => sum + value, 0);
+      const volumeTrend = older > 0 ? `${newer >= older ? '+' : ''}${Math.round(((newer - older) / older) * 100)}%` : '—';
+      setStats({ volumeTrend, workoutsPerMonth: sessions?.length || 0 });
     } catch (err) {
       console.error(err);
     } finally {
@@ -67,23 +70,23 @@ export default function HistoryScreen() {
     if (!user) return;
     const { data } = await supabase
       .from('bodyweight_logs')
-      .select('weight')
+      .select('weight_kg')
       .eq('user_id', user.id)
       .order('date', { ascending: false })
       .limit(1)
       .single();
       
-    if (data) setCurrentWeight(`${data.weight} kg`);
+    if (data) setCurrentWeight(`${data.weight_kg} kg`);
   };
 
   const handleLogWeight = async () => {
     if (!user || !weight) return;
     const w = parseFloat(weight);
-    if (isNaN(w)) return;
+    if (!Number.isFinite(w) || w <= 0 || w > 1000) { Alert.alert('Invalid weight', 'Enter a weight between 0 and 1000 kg.'); return; }
     
     const { error } = await supabase
       .from('bodyweight_logs')
-      .insert({ user_id: user.id, weight: w, date: new Date().toISOString() });
+      .insert({ user_id: user.id, weight_kg: w, date: new Date().toISOString() });
       
     if (error) {
       Alert.alert('Error', error.message);
