@@ -4,7 +4,15 @@
 
 `supabase/migrations/20260920000000_canonical_schema_and_sync.sql` is the canonical migration for `profiles`, `exercises`, `workout_sessions`, `session_exercises`, `sets`, and `bodyweight_logs`. Workout fields use `split_type`, `split_day`, `duration_minutes`, `is_finished`, `order_index`, `set_number`, `weight_kg`, and `completed`.
 
-Apply the migration with the project's Supabase migration workflow before deploying this revision. Its application to the remote database is **not verified** by this repository.
+The migration history has been applied to the linked `workout-helper-pro`
+project (`egefeiuyktelihsbbzyt`), including the follow-up hardening,
+distributed-rate-limit, and UUID child-graph migrations. The deployed schema,
+RLS policy definitions, indexes, and RPC signatures were inspected after
+application. A rollback-only database-role/claim probe verified own-record
+CRUD, cross-owner denial, graph idempotency, and child ownership checks without
+creating persistent test data. End-to-end verification with two real bearer
+tokens remains pending because the project's public Auth sign-up endpoint was
+rate-limited and no pre-existing test-user credentials are stored in this repo.
 
 The migration enables RLS for every user-owned table and provides `sync_workout_graph` / `sync_workout_graphs`. Those functions obtain ownership exclusively from `auth.uid()` and atomically persist session, exercise, and set records.
 
@@ -18,8 +26,18 @@ Local data is retained by account rather than deleted at sign-out, but all worko
 
 Set these server-side variables in Vercel: `VITE_SUPABASE_URL` (or `EXPO_PUBLIC_SUPABASE_URL`), `VITE_SUPABASE_ANON_KEY` (or `EXPO_PUBLIC_SUPABASE_ANON_KEY`), and `NVIDIA_API_KEY`. `OPENAI_API_KEY` is an optional vision fallback. Do not expose provider keys to the mobile or web bundle.
 
-AI APIs require bearer authentication, bounded JSON payloads, validated roles, output validation, timeouts, and a per-instance rate guard. The rate guard is not distributed: use a shared rate-limit provider before treating it as cross-instance abuse protection.
+AI APIs require bearer authentication, bounded JSON payloads, validated roles,
+output validation, and timeouts. The linked Supabase project now provides the
+authenticated `consume_api_rate_limit` RPC: it atomically enforces per-user,
+per-endpoint one-minute quotas and survives serverless-instance boundaries. It
+fails closed when unavailable. Provider credentials and origin configuration
+still must be configured in the current Vercel production project; this repo
+does not contain Vercel credentials.
 
 ## Validation
 
-Run `npm test`, `npm run build`, and from `mobile`, `npx tsc --noEmit`. An Android emulator, EAS production build, remote Supabase migration, and remote RLS verification require external credentials/infrastructure and are not verified by this checkout.
+Run `npm test`, `npm run build`, and from `mobile`, `npx tsc --noEmit`. Android
+emulator/device verification and an EAS production build require a locally
+installed Android SDK/emulator and an authenticated EAS account. Vercel's
+current production branch/deployment must also be reconciled before release:
+the Git default branch is `main`, while the release work is on `master`.

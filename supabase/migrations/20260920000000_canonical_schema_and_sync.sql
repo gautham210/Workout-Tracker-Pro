@@ -13,14 +13,14 @@ create table if not exists public.profiles (
   gender text,
   include_rest_days boolean not null default true,
   rest_days text[] not null default '{}',
-  custom_split jsonb,
+  custom_split text[],
   active_loop jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create table if not exists public.exercises (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key default gen_random_uuid()::text,
   name text not null,
   muscle_group text,
   description text,
@@ -28,7 +28,7 @@ create table if not exists public.exercises (
 );
 
 create table if not exists public.workout_sessions (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key default gen_random_uuid()::text,
   user_id uuid not null references auth.users(id) on delete cascade,
   date timestamptz not null default now(),
   split_type text,
@@ -45,8 +45,8 @@ create table if not exists public.workout_sessions (
 
 create table if not exists public.session_exercises (
   id uuid primary key default gen_random_uuid(),
-  session_id uuid not null references public.workout_sessions(id) on delete cascade,
-  exercise_id uuid not null references public.exercises(id),
+  session_id text not null references public.workout_sessions(id) on delete cascade,
+  exercise_id text not null references public.exercises(id),
   order_index integer not null default 0,
   created_at timestamptz not null default now(),
   constraint session_exercises_order_index_check check (order_index >= 0)
@@ -70,7 +70,7 @@ create table if not exists public.sets (
 );
 
 create table if not exists public.bodyweight_logs (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key default gen_random_uuid()::text,
   user_id uuid not null references auth.users(id) on delete cascade,
   date timestamptz not null default now(),
   weight_kg numeric not null,
@@ -87,6 +87,18 @@ alter table public.workout_sessions add column if not exists duration_minutes in
 alter table public.workout_sessions add column if not exists is_finished boolean not null default false;
 alter table public.workout_sessions add column if not exists created_at timestamptz not null default now();
 alter table public.workout_sessions add column if not exists updated_at timestamptz not null default now();
+alter table public.exercises add column if not exists description text;
+alter table public.exercises add column if not exists created_at timestamptz not null default now();
+alter table public.profiles add column if not exists tagline text;
+alter table public.profiles add column if not exists height_cm numeric;
+alter table public.profiles add column if not exists age integer;
+alter table public.profiles add column if not exists gender text;
+alter table public.profiles add column if not exists include_rest_days boolean not null default true;
+alter table public.profiles add column if not exists rest_days text[] not null default '{}';
+alter table public.profiles add column if not exists custom_split text[];
+alter table public.profiles add column if not exists active_loop jsonb;
+alter table public.profiles add column if not exists created_at timestamptz not null default now();
+alter table public.profiles add column if not exists updated_at timestamptz not null default now();
 alter table public.session_exercises add column if not exists order_index integer not null default 0;
 alter table public.session_exercises add column if not exists created_at timestamptz not null default now();
 alter table public.sets add column if not exists set_number integer not null default 1;
@@ -109,6 +121,50 @@ begin
     execute 'update public.bodyweight_logs set weight_kg = coalesce(weight_kg, weight) where weight_kg is null';
   end if;
 end $$;
+
+-- The legacy deployment stores calendar dates and text IDs for the catalog,
+-- workout sessions, and bodyweight logs. Child graph rows use UUID primary
+-- keys, so promote dates without rewriting any record identity.
+alter table public.workout_sessions alter column date type timestamptz using date::timestamptz;
+alter table public.bodyweight_logs alter column date type timestamptz using date::timestamptz;
+update public.session_exercises set order_index = 0 where order_index is null;
+update public.sets set completed = true where completed is null;
+update public.sets set set_number = 1 where set_number is null;
+alter table public.workout_sessions alter column user_id set not null;
+alter table public.workout_sessions alter column date set not null;
+alter table public.workout_sessions alter column is_finished set not null;
+alter table public.session_exercises alter column session_id set not null;
+alter table public.session_exercises alter column exercise_id set not null;
+alter table public.session_exercises alter column order_index set not null;
+alter table public.sets alter column session_exercise_id set not null;
+alter table public.sets alter column set_number set not null;
+alter table public.sets alter column weight_kg set not null;
+alter table public.sets alter column reps set not null;
+alter table public.sets alter column completed set not null;
+alter table public.bodyweight_logs alter column user_id set not null;
+alter table public.bodyweight_logs alter column date set not null;
+alter table public.bodyweight_logs alter column weight_kg set not null;
+
+alter table public.workout_sessions drop constraint if exists workout_sessions_duration_minutes_check;
+alter table public.workout_sessions drop constraint if exists workout_sessions_split_type_length;
+alter table public.workout_sessions drop constraint if exists workout_sessions_split_day_length;
+alter table public.session_exercises drop constraint if exists session_exercises_order_index_check;
+alter table public.sets drop constraint if exists sets_set_number_check;
+alter table public.sets drop constraint if exists sets_weight_kg_check;
+alter table public.sets drop constraint if exists sets_reps_check;
+alter table public.sets drop constraint if exists sets_rpe_check;
+alter table public.sets drop constraint if exists sets_rir_check;
+alter table public.bodyweight_logs drop constraint if exists bodyweight_logs_weight_kg_check;
+alter table public.workout_sessions add constraint workout_sessions_duration_minutes_check check (duration_minutes is null or duration_minutes between 0 and 1440);
+alter table public.workout_sessions add constraint workout_sessions_split_type_length check (split_type is null or char_length(split_type) <= 80);
+alter table public.workout_sessions add constraint workout_sessions_split_day_length check (split_day is null or char_length(split_day) <= 80);
+alter table public.session_exercises add constraint session_exercises_order_index_check check (order_index >= 0);
+alter table public.sets add constraint sets_set_number_check check (set_number >= 1);
+alter table public.sets add constraint sets_weight_kg_check check (weight_kg >= 0 and weight_kg <= 1000);
+alter table public.sets add constraint sets_reps_check check (reps between 1 and 500);
+alter table public.sets add constraint sets_rpe_check check (rpe is null or rpe between 1 and 10);
+alter table public.sets add constraint sets_rir_check check (rir is null or rir between 0 and 10);
+alter table public.bodyweight_logs add constraint bodyweight_logs_weight_kg_check check (weight_kg > 0 and weight_kg <= 1000);
 
 create index if not exists workout_sessions_user_date_idx on public.workout_sessions(user_id, date desc);
 create index if not exists session_exercises_session_order_idx on public.session_exercises(session_id, order_index);
@@ -165,24 +221,25 @@ create trigger on_auth_user_created after insert on auth.users for each row exec
 -- Atomically persist one completed workout graph.  IDs are client generated
 -- only for idempotency; identity and ownership always come from auth.uid().
 create or replace function public.sync_workout_graph(p_workout jsonb)
-returns uuid
+returns text
 language plpgsql
 security definer set search_path = public, auth
 as $$
 declare
   v_user uuid := auth.uid();
-  v_workout_id uuid;
+  v_workout_id text;
   v_existing_owner uuid;
   v_exercise jsonb;
   v_set jsonb;
-  v_session_exercise_id uuid;
-  v_exercise_id uuid;
-  v_set_id uuid;
+  v_session_exercise_id text;
+  v_exercise_id text;
+  v_set_id text;
   v_index integer := 0;
 begin
   if v_user is null then raise exception 'authentication required' using errcode = '42501'; end if;
   if jsonb_typeof(p_workout) <> 'object' then raise exception 'workout must be an object'; end if;
-  begin v_workout_id := (p_workout ->> 'id')::uuid; exception when others then raise exception 'workout id must be a uuid'; end;
+  v_workout_id := nullif(p_workout ->> 'id', '');
+  if v_workout_id is null or v_workout_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then raise exception 'workout id must be a uuid string'; end if;
   if coalesce((p_workout ->> 'is_finished')::boolean, false) is not true then raise exception 'only completed workouts may be synced'; end if;
   if jsonb_typeof(coalesce(p_workout -> 'exercises', 'null'::jsonb)) <> 'array' then raise exception 'workout exercises must be an array'; end if;
   if jsonb_array_length(p_workout -> 'exercises') > 50 then raise exception 'too many exercises'; end if;
@@ -205,24 +262,27 @@ begin
 
   for v_exercise in select value from jsonb_array_elements(p_workout -> 'exercises') loop
     v_index := v_index + 1;
-    begin v_session_exercise_id := (v_exercise ->> 'id')::uuid; v_exercise_id := (v_exercise ->> 'exercise_id')::uuid;
-    exception when others then raise exception 'exercise ids must be uuids'; end;
+    v_session_exercise_id := nullif(v_exercise ->> 'id', '');
+    v_exercise_id := nullif(v_exercise ->> 'exercise_id', '');
+    if v_session_exercise_id is null or v_session_exercise_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then raise exception 'session exercise id must be a uuid string'; end if;
+    if v_exercise_id is null or char_length(v_exercise_id) > 200 then raise exception 'invalid exercise id'; end if;
     if not exists (select 1 from public.exercises where id = v_exercise_id) then raise exception 'unknown exercise'; end if;
     if jsonb_typeof(coalesce(v_exercise -> 'sets', 'null'::jsonb)) <> 'array' then raise exception 'exercise sets must be an array'; end if;
     if jsonb_array_length(v_exercise -> 'sets') > 100 then raise exception 'too many sets'; end if;
-    if exists (select 1 from public.session_exercises se join public.workout_sessions ws on ws.id = se.session_id where se.id = v_session_exercise_id and ws.user_id <> v_user) then raise exception 'session exercise does not belong to current user' using errcode = '42501'; end if;
+    if exists (select 1 from public.session_exercises se join public.workout_sessions ws on ws.id = se.session_id where se.id = v_session_exercise_id::uuid and ws.user_id <> v_user) then raise exception 'session exercise does not belong to current user' using errcode = '42501'; end if;
     insert into public.session_exercises (id, session_id, exercise_id, order_index)
-    values (v_session_exercise_id, v_workout_id, v_exercise_id, greatest(0, coalesce((v_exercise ->> 'order_index')::integer, v_index - 1)))
+    values (v_session_exercise_id::uuid, v_workout_id, v_exercise_id, greatest(0, coalesce((v_exercise ->> 'order_index')::integer, v_index - 1)))
     on conflict (id) do update set session_id = excluded.session_id, exercise_id = excluded.exercise_id, order_index = excluded.order_index;
 
     for v_set in select value from jsonb_array_elements(v_exercise -> 'sets') loop
-      begin v_set_id := (v_set ->> 'id')::uuid; exception when others then raise exception 'set id must be a uuid'; end;
+      v_set_id := nullif(v_set ->> 'id', '');
+      if v_set_id is null or v_set_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then raise exception 'set id must be a uuid string'; end if;
       if coalesce((v_set ->> 'completed')::boolean, false) is not true then raise exception 'incomplete sets cannot be synced'; end if;
       if coalesce((v_set ->> 'weight_kg')::numeric, -1) < 0 or coalesce((v_set ->> 'weight_kg')::numeric, 1001) > 1000 then raise exception 'invalid weight'; end if;
       if coalesce((v_set ->> 'reps')::integer, 0) not between 1 and 500 then raise exception 'invalid reps'; end if;
-      if exists (select 1 from public.sets s join public.session_exercises se on se.id = s.session_exercise_id join public.workout_sessions ws on ws.id = se.session_id where s.id = v_set_id and ws.user_id <> v_user) then raise exception 'set does not belong to current user' using errcode = '42501'; end if;
+      if exists (select 1 from public.sets s join public.session_exercises se on se.id = s.session_exercise_id join public.workout_sessions ws on ws.id = se.session_id where s.id = v_set_id::uuid and ws.user_id <> v_user) then raise exception 'set does not belong to current user' using errcode = '42501'; end if;
       insert into public.sets (id, session_exercise_id, set_number, weight_kg, reps, completed, rpe, rir)
-      values (v_set_id, v_session_exercise_id, greatest(1, coalesce((v_set ->> 'set_number')::integer, 1)), (v_set ->> 'weight_kg')::numeric, (v_set ->> 'reps')::integer, true,
+      values (v_set_id::uuid, v_session_exercise_id::uuid, greatest(1, coalesce((v_set ->> 'set_number')::integer, 1)), (v_set ->> 'weight_kg')::numeric, (v_set ->> 'reps')::integer, true,
         case when v_set ? 'rpe' and nullif(v_set ->> 'rpe','') is not null then (v_set ->> 'rpe')::integer else null end,
         case when v_set ? 'rir' and nullif(v_set ->> 'rir','') is not null then (v_set ->> 'rir')::integer else null end)
       on conflict (id) do update set session_exercise_id = excluded.session_exercise_id, set_number = excluded.set_number, weight_kg = excluded.weight_kg, reps = excluded.reps, completed = true, rpe = excluded.rpe, rir = excluded.rir;

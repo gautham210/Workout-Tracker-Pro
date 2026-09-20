@@ -1,17 +1,12 @@
-// Best-effort protection for a single serverless instance.  It deliberately
-// does not claim to be distributed rate limiting; production can replace it
-// with a shared store without changing callers.
-const buckets = new Map();
-
-export function allowRequest(scope, subject, limit, windowMs) {
-  const now = Date.now();
-  const key = `${scope}:${subject}`;
-  const existing = buckets.get(key);
-  const bucket = !existing || existing.resetAt <= now ? { count: 0, resetAt: now + windowMs } : existing;
-  bucket.count += 1;
-  buckets.set(key, bucket);
-  if (buckets.size > 10_000) {
-    for (const [candidate, value] of buckets) if (value.resetAt <= now) buckets.delete(candidate);
+/**
+ * Consume a shared, user-derived quota through the authenticated Supabase RPC.
+ * This is intentionally fail-closed: reverting to an in-memory map would make
+ * a serverless deployment appear protected while allowing instance hopping.
+ */
+export async function consumeRequestQuota(databaseClient, scope) {
+  const { data, error } = await databaseClient.rpc('consume_api_rate_limit', { p_scope: scope });
+  if (error || !data || typeof data.allowed !== 'boolean' || !Number.isInteger(data.retryAfterSeconds)) {
+    return { allowed: false, retryAfterSeconds: 60, unavailable: true };
   }
-  return { allowed: bucket.count <= limit, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+  return { allowed: data.allowed, retryAfterSeconds: Math.max(1, data.retryAfterSeconds), unavailable: false };
 }

@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { authenticate, authenticatedDatabaseClient } from './_auth.js';
 import { setCors, isJsonRequest, errorMessage } from './_http.js';
-import { allowRequest } from './_rate-limit.js';
+import { consumeRequestQuota } from './_rate-limit.js';
 import { validateChatMessages } from './_validation.js';
 
 const TIMEOUT_LIMIT_MS = 12_000;
@@ -41,9 +41,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!isJsonRequest(req)) return res.status(415).json({ error: 'Content-Type must be application/json' });
 
-  const { user, error: authError } = await authenticate(req);
+  const { error: authError } = await authenticate(req);
   if (authError) return res.status(401).json({ error: authError });
-  const rate = allowRequest('ai-chat', user.id, 20, 60_000);
+  const rate = await consumeRequestQuota(authenticatedDatabaseClient(req), 'ai-chat');
+  if (rate.unavailable) return res.status(503).json({ error: 'Request protection is temporarily unavailable. Try again shortly.' });
   if (!rate.allowed) { res.setHeader('Retry-After', String(rate.retryAfterSeconds)); return res.status(429).json({ error: 'Too many AI requests. Try again shortly.' }); }
 
   const validatedMessages = validateChatMessages(req.body?.messages);

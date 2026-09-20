@@ -1,4 +1,8 @@
 -- Insert a base set of standard exercises
+ALTER TABLE public.exercises ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.exercises ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
+CREATE UNIQUE INDEX IF NOT EXISTS exercises_name_key ON public.exercises (name);
+
 INSERT INTO exercises (name, muscle_group, description)
 VALUES
   -- Chest

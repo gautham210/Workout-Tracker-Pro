@@ -11,7 +11,13 @@ node_modules
 .env
 .env.local
 .env*.local
+.expo
+.expo/
 mobile/.expo/
+supabase/.temp/
+supabase/remote-public-before.sql
+scratch/
+stitch-design/
 dist
 dist-ssr
 *.local

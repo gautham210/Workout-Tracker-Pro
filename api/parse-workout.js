@@ -8,9 +8,9 @@
  */
 
 import OpenAI from 'openai';
-import { authenticate } from './_auth.js';
+import { authenticate, authenticatedDatabaseClient } from './_auth.js';
 import { setCors, isJsonRequest } from './_http.js';
-import { allowRequest } from './_rate-limit.js';
+import { consumeRequestQuota } from './_rate-limit.js';
 import { validateWorkoutParse } from './_validation.js';
 
 const MAX_INPUT_CHARS = 12_000;
@@ -386,11 +386,12 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { user, error: authError } = await authenticate(req);
+  const { error: authError } = await authenticate(req);
   if (authError) {
     return res.status(401).json({ error: authError });
   }
-  const rate = allowRequest('parse-workout', user.id, 15, 60_000);
+  const rate = await consumeRequestQuota(authenticatedDatabaseClient(req), 'parse-workout');
+  if (rate.unavailable) return res.status(503).json({ error: 'Request protection is temporarily unavailable. Try again shortly.' });
   if (!rate.allowed) { res.setHeader('Retry-After', String(rate.retryAfterSeconds)); return res.status(429).json({ error: 'Too many import requests. Try again shortly.' }); }
 
   if (!isJsonRequest(req)) {
