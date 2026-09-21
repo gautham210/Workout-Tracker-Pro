@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const migration = readFileSync(new URL('../supabase/migrations/20260920000000_canonical_schema_and_sync.sql', import.meta.url), 'utf8');
 const rateLimitMigration = readFileSync(new URL('../supabase/migrations/20260921010000_distributed_api_rate_limits.sql', import.meta.url), 'utf8');
 const uuidFixMigration = readFileSync(new URL('../supabase/migrations/20260921020000_fix_sync_graph_uuid_children.sql', import.meta.url), 'utf8');
+const accountCleanupMigration = readFileSync(new URL('../supabase/migrations/20260921030000_cascade_auth_account_cleanup.sql', import.meta.url), 'utf8');
 
 test('canonical migration owns every user data path and uses server identity', () => {
   for (const table of ['profiles', 'workout_sessions', 'session_exercises', 'sets', 'bodyweight_logs']) {
@@ -34,4 +35,11 @@ test('shared API quota derives ownership from auth and is not publicly accessibl
   assert.match(rateLimitMigration, /v_user uuid := auth\.uid\(\)/);
   assert.match(rateLimitMigration, /revoke all on function public\.consume_api_rate_limit\(text\) from public, anon/);
   assert.match(rateLimitMigration, /grant execute on function public\.consume_api_rate_limit\(text\) to authenticated/);
+});
+
+test('Auth account deletion cascades through every user-owned root record', () => {
+  for (const constraint of ['profiles_id_fkey', 'workout_sessions_user_id_fkey', 'bodyweight_logs_user_id_fkey']) {
+    assert.match(accountCleanupMigration, new RegExp(`drop constraint if exists ${constraint}`));
+  }
+  assert.equal((accountCleanupMigration.match(/references auth\.users\(id\) on delete cascade/g) || []).length, 3);
 });

@@ -6,7 +6,7 @@
 
 The migration history has been applied to the linked `workout-helper-pro`
 project (`egefeiuyktelihsbbzyt`), including the follow-up hardening,
-distributed-rate-limit, and UUID child-graph migrations. The deployed schema,
+distributed-rate-limit, UUID child-graph, and Auth-account cascade migrations. The deployed schema,
 RLS policy definitions, indexes, and RPC signatures were inspected after
 application. A rollback-only database-role/claim probe verified own-record
 CRUD, cross-owner denial, graph idempotency, and child ownership checks without
