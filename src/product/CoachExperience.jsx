@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Bot, ClipboardPlus, LoaderCircle, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Apple, ArrowUp, Bot, ClipboardPlus, LoaderCircle, ScanLine, Sparkles } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authenticatedApiPost } from '../lib/api';
 import { supabase } from '../lib/supabase';
@@ -85,6 +85,7 @@ export default function CoachExperience() {
   const splitName = Array.isArray(profile?.custom_split) && profile.custom_split.length ? 'Your custom split' : 'Your training context';
   return <main className="experience coach-experience">
     <section className="coach-hero"><div className="coach-mark"><Sparkles size={21} /></div><div><p className="eyebrow">Training intelligence</p><h1>Coach, in your<br />corner.</h1><span>{splitName} is available to the coach.</span></div></section>
+    <div className="coach-context-rail"><Link to="/nutrition"><span className="coach-context-icon"><ScanLine size={17} /></span><span><strong>Scan a meal</strong><small>Bring nutrition into the conversation.</small></span><Apple size={16} /></Link></div>
     <section className="coach-thread" aria-live="polite">{messages.map((message, index) => <CoachMessage key={`${message.role}-${index}`} message={message} onApply={applyWorkout} applying={applying} />)}{loading && <div className="coach-message assistant is-thinking"><Bot size={16} /><i /><i /><i /></div>}<div ref={end} /></section>
     {error && <div className="inline-state is-error">{error}</div>}
     {messages.length === 1 && <div className="coach-starters">{starters.map((starter) => <button type="button" key={starter} onClick={() => ask(starter)} disabled={loading}>{starter}</button>)}</div>}

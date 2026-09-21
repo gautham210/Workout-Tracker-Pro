@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, Clock3, Plus, Search, Sparkles, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Check, ChevronLeft, ChevronRight, Clock3, Plus, Search, Sparkles, TimerReset, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import ExerciseVisual from './ExerciseVisual';
@@ -130,7 +130,7 @@ export default function WorkoutExperience() {
     <div className={`experience workout-experience ${phase === 'active' ? 'is-active-workout' : ''}`}>
       {phase === 'build' ? (
         <>
-          <section className="workout-builder-head"><p className="eyebrow">Create a session</p><h1>Train with<br />a clear focus.</h1><p>Pick your movements, then move through one focused set at a time.</p></section>
+          <section className="workout-builder-head"><p className="eyebrow">Create a session</p><h1>Train with<br />a clear focus.</h1><p>Pick your movements, then move through one focused set at a time.</p><Link to="/import" className="builder-import">Have a plan already? <span>Import it</span></Link></section>
           <section className="builder-list">
             {exercises.length === 0 ? <BuilderEmpty onOpen={() => setLibraryOpen(true)} /> : exercises.map((item, index) => (
               <article className="builder-exercise" key={item.exercise.id}>
@@ -146,8 +146,9 @@ export default function WorkoutExperience() {
       ) : (
         <>
           <section className="active-topline"><button className="icon-button" onClick={resetWorkout} type="button" aria-label="Return to workout builder"><ChevronLeft size={21} /></button><span>{completedSets} sets logged</span><button className="text-action" onClick={finishWorkout} disabled={saving} type="button">{saving ? 'Saving…' : 'Finish'}</button></section>
-          {restEndsAt && <div className="rest-glass"><Clock3 size={16} /><span>Rest</span><strong>{formatClock(restRemaining)}</strong><button type="button" onClick={() => setRestEndsAt(null)}>Skip</button></div>}
-          {active && <ActiveExercise item={active} exerciseIndex={activeIndex} updateSet={updateSet} toggleSet={toggleSet} addSet={addSet} />}
+          <div className="workout-progress" aria-label={`${completedSets} completed sets`}><span style={{ width: `${Math.min(100, (completedSets / Math.max(1, exercises.flatMap((item) => item.sets).length)) * 100)}%` }} /></div>
+          {restEndsAt && <div className="rest-glass"><Clock3 size={16} /><span>Rest</span><strong>{formatClock(restRemaining)}</strong><button type="button" onClick={() => { const next = (restEndsAt || Date.now()) + 30_000; setNow(Date.now()); setRestEndsAt(next); }} aria-label="Add 30 seconds to rest"><TimerReset size={15} /> +30</button><button type="button" onClick={() => setRestEndsAt(null)}>Skip</button></div>}
+          {active && <ActiveExercise key={active.exercise.id} item={active} exerciseIndex={activeIndex} updateSet={updateSet} toggleSet={toggleSet} addSet={addSet} />}
           <div className="movement-pager"><button type="button" onClick={() => setActiveIndex((index) => Math.max(0, index - 1))} disabled={activeIndex === 0}><ChevronLeft size={20} /></button><span>{activeIndex + 1} / {exercises.length}</span><button type="button" onClick={() => setActiveIndex((index) => Math.min(exercises.length - 1, index + 1))} disabled={activeIndex === exercises.length - 1}><ChevronRight size={20} /></button></div>
           {saveError && <div className="inline-state is-error">{saveError}</div>}
         </>
@@ -171,13 +172,27 @@ function ActiveExercise({ item, exerciseIndex, updateSet, toggleSet, addSet }) {
 }
 
 function SetRow({ set, index, update, complete }) {
-  return <div className={`set-row ${set.completed ? 'is-complete' : ''}`}><span className="set-number">{index + 1}</span><input aria-label={`Set ${index + 1} weight in kilograms`} disabled={set.completed} value={set.weight_kg} onChange={(event) => update('weight_kg', event.target.value)} inputMode="decimal" placeholder="0" /><input aria-label={`Set ${index + 1} reps`} disabled={set.completed} value={set.reps} onChange={(event) => update('reps', event.target.value)} inputMode="numeric" placeholder="0" /><input aria-label={`Set ${index + 1} RPE`} disabled={set.completed} value={set.rpe} onChange={(event) => update('rpe', event.target.value)} inputMode="numeric" placeholder="—" /><input aria-label={`Set ${index + 1} reps in reserve`} disabled={set.completed} value={set.rir} onChange={(event) => update('rir', event.target.value)} inputMode="numeric" placeholder="—" /><button type="button" className="complete-set" onClick={complete} aria-label={set.completed ? `Uncomplete set ${index + 1}` : `Complete set ${index + 1}`}>{set.completed ? <Check size={17} /> : <span />}</button></div>;
+  const adjust = (field, amount) => {
+    const current = Number(set[field]);
+    const next = Math.max(0, Math.round(((Number.isFinite(current) ? current : 0) + amount) * 10) / 10);
+    update(field, String(next));
+  };
+  const setRating = (field, value) => update(field, value === '0' ? '' : value);
+  return <div className={`set-row ${set.completed ? 'is-complete' : ''}`}>
+    <span className="set-number">{index + 1}</span>
+    <div className="numeric-control" role="group" aria-label={`Set ${index + 1} weight`}><button type="button" disabled={set.completed} onClick={() => adjust('weight_kg', -2.5)} aria-label={`Reduce set ${index + 1} weight`}>−</button><input aria-label={`Set ${index + 1} weight in kilograms`} disabled={set.completed} value={set.weight_kg} onChange={(event) => update('weight_kg', event.target.value)} inputMode="decimal" placeholder="0" /><button type="button" disabled={set.completed} onClick={() => adjust('weight_kg', 2.5)} aria-label={`Increase set ${index + 1} weight`}>+</button></div>
+    <div className="numeric-control" role="group" aria-label={`Set ${index + 1} repetitions`}><button type="button" disabled={set.completed} onClick={() => adjust('reps', -1)} aria-label={`Reduce set ${index + 1} reps`}>−</button><input aria-label={`Set ${index + 1} reps`} disabled={set.completed} value={set.reps} onChange={(event) => update('reps', event.target.value)} inputMode="numeric" placeholder="0" /><button type="button" disabled={set.completed} onClick={() => adjust('reps', 1)} aria-label={`Increase set ${index + 1} reps`}>+</button></div>
+    <label className="rating-control"><input aria-label={`Set ${index + 1} RPE`} disabled={set.completed} type="range" min="0" max="10" value={set.rpe === '' ? 0 : set.rpe} onChange={(event) => setRating('rpe', event.target.value)} /><output>{set.rpe || '—'}</output></label>
+    <label className="rating-control"><input aria-label={`Set ${index + 1} reps in reserve`} disabled={set.completed} type="range" min="0" max="5" value={set.rir === '' ? 0 : set.rir} onChange={(event) => setRating('rir', event.target.value)} /><output>{set.rir || '—'}</output></label>
+    <button type="button" className="complete-set" onClick={complete} aria-label={set.completed ? `Uncomplete set ${index + 1}` : `Complete set ${index + 1}`}>{set.completed ? <Check size={17} /> : <span />}</button>
+  </div>;
 }
 
 function ExerciseLibrary({ open, close, query, setQuery, catalog, loading, add, selectedIds }) {
   if (!open) return null;
-  return <div className="sheet-backdrop" onMouseDown={close}><section className="exercise-sheet" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><p className="eyebrow">Exercise library</p><h2>Find your movement.</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close exercise library"><X size={20} /></button></div><label className="search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" /></label><div className="exercise-results">{loading ? <p className="quiet-state">Loading movements…</p> : catalog.length ? catalog.map((exercise) => <button className="library-item" type="button" key={exercise.id} onClick={() => add(exercise)} disabled={selectedIds.has(exercise.id)}><ExerciseVisual name={exercise.name} muscle={exercise.muscle_group} compact /><span><strong>{exercise.name}</strong><small>{exercise.muscle_group || 'Movement'}</small></span>{selectedIds.has(exercise.id) ? <Check size={18} /> : <Plus size={18} />}</button>) : <p className="quiet-state">No exercises match that search.</p>}</div></section></div>;
+  return <div className="sheet-backdrop" onMouseDown={close}><section className="exercise-sheet" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><p className="eyebrow">Exercise library</p><h2>Find your movement.</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close exercise library"><X size={20} /></button></div><label className="search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" /></label><div className="exercise-results">{loading ? <LibrarySkeleton /> : catalog.length ? catalog.map((exercise) => <button className="library-item" type="button" key={exercise.id} onClick={() => add(exercise)} disabled={selectedIds.has(exercise.id)}><ExerciseVisual name={exercise.name} muscle={exercise.muscle_group} compact /><span><strong>{exercise.name}</strong><small>{exercise.muscle_group || 'Movement'}</small></span>{selectedIds.has(exercise.id) ? <Check size={18} /> : <Plus size={18} />}</button>) : <p className="quiet-state">No exercises match that search.</p>}</div></section></div>;
 }
+function LibrarySkeleton() { return <div className="library-skeleton" aria-label="Loading exercise library"><span /><span /><span /><span /></div>; }
 
 function WorkoutComplete({ volume, sets, onHome, onAnother }) {
   return <div className="experience completion-experience"><div className="completion-burst"><Check size={38} /></div><p className="eyebrow">Workout complete</p><h1>Strong work.</h1><p className="completion-copy">Your completed workout is recorded through the real workout graph.</p><div className="completion-metrics"><div><strong>{kg(volume)}</strong><span>kg volume</span></div><div><strong>{sets}</strong><span>sets completed</span></div></div><button type="button" className="primary-action" onClick={onAnother}>Build next workout</button><button type="button" className="text-action completion-home" onClick={onHome}>Back home</button></div>;
