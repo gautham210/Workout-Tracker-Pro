@@ -65,7 +65,7 @@ export default function NetworkToast({ supabaseError }) {
       <div style={{
         position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
         left: '50%', transform: 'translateX(-50%)',
-        background: 'rgba(48,209,88,0.15)', border: '1px solid rgba(48,209,88,0.4)',
+        background: 'rgba(255,255,255,0.84)', border: '1px solid rgba(52,199,89,0.34)',
         color: '#30D158', borderRadius: '100px', padding: '10px 20px',
         display: 'flex', alignItems: 'center', gap: '8px',
         fontWeight: '700', fontSize: '14px', zIndex: 9999,
@@ -84,7 +84,7 @@ export default function NetworkToast({ supabaseError }) {
       <div style={{
         position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
         left: '16px', right: '16px',
-        background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.35)',
+        background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(255,159,10,0.35)',
         borderRadius: '16px', padding: '14px 18px',
         display: 'flex', alignItems: 'center', gap: '12px',
         zIndex: 9999, backdropFilter: 'blur(20px)',
@@ -93,11 +93,11 @@ export default function NetworkToast({ supabaseError }) {
         <WifiOff size={18} color="#FF9F0A" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '800', fontSize: '14px', color: '#FF9F0A' }}>No Internet Connection</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', fontWeight: '500' }}>Your workout data is saved locally.</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: '500' }}>Your workout data is saved locally.</div>
         </div>
         <button
           onClick={() => setDismissed(true)}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-secondary)', flexShrink: 0 }}
         >
           <X size={16} />
         </button>
@@ -111,7 +111,7 @@ export default function NetworkToast({ supabaseError }) {
       <div style={{
         position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
         left: '16px', right: '16px',
-        background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.3)',
+        background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(255,69,58,0.3)',
         borderRadius: '16px', padding: '14px 18px',
         display: 'flex', alignItems: 'center', gap: '12px',
         zIndex: 9999, backdropFilter: 'blur(20px)',
@@ -119,7 +119,7 @@ export default function NetworkToast({ supabaseError }) {
         <WifiOff size={18} color="var(--error-color)" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '800', fontSize: '14px', color: 'var(--error-color)' }}>Server Unreachable</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', fontWeight: '500' }}>Could not connect to database.</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: '500' }}>Could not connect to database.</div>
         </div>
         <button
           onClick={handleRetry}
@@ -129,7 +129,7 @@ export default function NetworkToast({ supabaseError }) {
           {retrying ? <RefreshCw size={12} style={{ animation: 'spinKey 1s linear infinite' }} /> : <RefreshCw size={12} />}
           Retry
         </button>
-        <button onClick={() => setDismissed(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+        <button onClick={() => setDismissed(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-secondary)', flexShrink: 0 }}>
           <X size={16} />
         </button>
       </div>

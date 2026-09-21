@@ -11,10 +11,10 @@ interface GlassCardProps {
 }
 
 export default function GlassCard({ children, style, strong = false }: GlassCardProps) {
-  const innerBg = strong ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.04)';
+  const innerBg = strong ? 'rgba(255, 255, 255, 0.96)' : 'rgba(255, 255, 255, 0.90)';
   const borderColors: [string, string] = strong 
-    ? ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)'] 
-    : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.02)'];
+    ? ['rgba(255,255,255,1)', 'rgba(196,207,225,0.72)']
+    : ['rgba(255,255,255,0.98)', 'rgba(205,214,230,0.66)'];
 
   return (
     <LinearGradient
@@ -25,12 +25,12 @@ export default function GlassCard({ children, style, strong = false }: GlassCard
     >
       <BlurView
         intensity={strong ? 40 : 25}
-        tint="dark"
+        tint="light"
         style={[styles.blurContent, { backgroundColor: innerBg }]}
       >
         {/* Absolute top thin reflection edge */}
         <LinearGradient
-          colors={['transparent', 'rgba(255,255,255,0.15)', 'transparent'] as any}
+          colors={['transparent', 'rgba(255,255,255,0.9)', 'transparent'] as any}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.topReflectionEdge}
@@ -46,11 +46,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 1.2, // Border thickness
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: '#263754',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.10,
+    shadowRadius: 18,
+    elevation: 4,
   },
   blurContent: {
     borderRadius: 22.8,

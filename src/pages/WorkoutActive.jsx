@@ -473,7 +473,7 @@ export default function WorkoutActive() {
   // ── Completion Screen ─────────────────────────────────────────────────────
   if (isCompleteMode) {
     return (
-      <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000, background:'#0b0f14', display:'flex', flexDirection:'column', padding:'24px', alignItems:'center', justifyContent:'center', overflowY:'auto' }}>
+      <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000, background:'#f7f8fc', display:'flex', flexDirection:'column', padding:'24px', alignItems:'center', justifyContent:'center', overflowY:'auto' }}>
         <style>{`
           @keyframes scaleCheck { 0% { transform:scale(0.5); opacity:0; } 70% { transform:scale(1.1); box-shadow:0 0 60px rgba(48,209,88,0.4); } 100% { transform:scale(1); opacity:1; box-shadow:0 0 40px rgba(48,209,88,0.2); } }
           .pr-badge { animation: prPop 0.5s cubic-bezier(0.2,0.8,0.2,1) forwards; }
@@ -486,7 +486,7 @@ export default function WorkoutActive() {
         <div style={{ background:'rgba(48,209,88,0.1)', padding:'24px', borderRadius:'50%', marginBottom:'32px', animation:'scaleCheck 0.6s cubic-bezier(0.2,0.8,0.2,1) forwards' }}>
           <CheckCircle size={80} color="#30D158" />
         </div>
-        <h1 style={{ fontSize:'42px', fontWeight:'800', margin:0, letterSpacing:'-1.5px', color:'white' }}>Workout Finished</h1>
+        <h1 style={{ fontSize:'42px', fontWeight:'800', margin:0, letterSpacing:'-1.5px', color:'#152033' }}>Workout Finished</h1>
         <p style={{ marginTop:'12px', fontSize:'18px', color:'var(--text-secondary)', fontWeight:'600', marginBottom:'40px', textAlign:'center' }}>
           Outstanding work. Keep pushing forward!
         </p>
@@ -494,12 +494,12 @@ export default function WorkoutActive() {
         <div className="glass card stagger-1" style={{ width:'100%', maxWidth:'400px', display:'flex', justifyContent:'space-around', padding:'24px', marginBottom: completionData.prs.length > 0 ? '24px' : '40px' }}>
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:'12px', textTransform:'uppercase', color:'var(--text-secondary)', letterSpacing:'1px', fontWeight:'700', marginBottom:'8px' }}>Volume</div>
-            <div style={{ fontSize:'28px', fontWeight:'800', color:'#fff' }}>{Math.round(completionData.vol).toLocaleString()} <span style={{ fontSize:'14px', color:'var(--text-secondary)' }}>kg</span></div>
+            <div style={{ fontSize:'28px', fontWeight:'800', color:'#152033' }}>{Math.round(completionData.vol).toLocaleString()} <span style={{ fontSize:'14px', color:'var(--text-secondary)' }}>kg</span></div>
           </div>
           <div style={{ width:'1px', background:'rgba(255,255,255,0.1)' }} />
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:'12px', textTransform:'uppercase', color:'var(--text-secondary)', letterSpacing:'1px', fontWeight:'700', marginBottom:'8px' }}>Sets</div>
-            <div style={{ fontSize:'28px', fontWeight:'800', color:'#fff' }}>{completionData.sets}</div>
+            <div style={{ fontSize:'28px', fontWeight:'800', color:'#152033' }}>{completionData.sets}</div>
           </div>
         </div>
 
@@ -577,27 +577,27 @@ export default function WorkoutActive() {
           bottom: 0; left: 0; right: 0;
           padding: 16px 20px;
           padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-          background: rgba(10, 14, 20, 0.95);
+            background: rgba(255,255,255,0.82);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          border-top: 1px solid rgba(255,255,255,0.08);
+          border-top: 1px solid rgba(35,55,88,0.10);
           z-index: 100;
           display: flex;
           gap: 12px;
           justify-content: center;
         }
         @media (min-width: 768px) {
-          .sticky-footer-blur { left: 250px; padding-bottom: 20px; }
+          .sticky-footer-blur { left: 272px; padding-bottom: 20px; }
         }
         
         .set-row-input {
-          background: transparent; border: none; color: #fff;
+          background: transparent; border: none; color: #152033;
           font-size: 18px; font-weight: 800; outline: none;
           text-align: right; width: 100%; min-width: 0;
         }
         .pagination-dot {
           width: 8px; height: 8px; border-radius: 50%;
-          background: rgba(255,255,255,0.15);
+          background: #d5deeb;
           transition: background 0.2s, transform 0.2s;
         }
         .pagination-dot.active {
@@ -618,7 +618,7 @@ export default function WorkoutActive() {
 
       {/* ── Exercise Search Modal Overlay ── */}
       {isSearching && (
-        <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000, background:'rgba(6,9,12,0.97)', display:'flex', flexDirection:'column' }}>
+        <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000, background:'rgba(247,248,252,0.98)', display:'flex', flexDirection:'column' }}>
           <div style={{ padding:'20px 20px 0', display:'flex', justifyContent:'flex-end', maxWidth:'800px', margin:'0 auto', width:'100%' }}>
             <button onClick={closeSearch} style={{ background:'rgba(255,255,255,0.07)', borderRadius:'50%', width:'44px', height:'44px', color:'white', display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
               <X size={22} />
@@ -870,7 +870,7 @@ export default function WorkoutActive() {
                           display: 'flex', 
                           alignItems: 'center', 
                           gap: '8px', 
-                          background: isRowCompleted ? 'rgba(48,209,88,0.06)' : 'rgba(0,0,0,0.2)',
+                          background: isRowCompleted ? 'rgba(48,209,88,0.10)' : '#f0f3f8',
                           borderRadius: '12px',
                           padding: '6px 8px',
                           border: isRowCompleted 

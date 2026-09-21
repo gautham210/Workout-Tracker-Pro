@@ -33,13 +33,14 @@ export default function SignIn() {
   return (
     <View style={styles.container}>
       <GlassCard strong style={styles.card}>
-        <Dumbbell size={48} color="#0ea5e9" style={styles.icon} />
-        <Text style={styles.title}>Workout Tracker Pro</Text>
+        <View style={styles.mark}><Dumbbell size={32} color="#fff" /></View>
+        <Text style={styles.title}>Workout Tracker</Text>
+        <Text style={styles.subtitle}>Your training, in focus</Text>
         
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="rgba(255,255,255,0.5)"
+          placeholderTextColor="#9aa5b5"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -47,7 +48,7 @@ export default function SignIn() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="rgba(255,255,255,0.5)"
+          placeholderTextColor="#9aa5b5"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -68,7 +69,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#f7f8fc',
     padding: 20,
     justifyContent: 'center',
   },
@@ -76,29 +77,29 @@ const styles = StyleSheet.create({
     padding: 30,
     alignItems: 'center',
   },
-  icon: {
-    marginBottom: 16,
-  },
+  mark: { width: 64, height: 64, borderRadius: 22, backgroundColor: '#007aff', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
-    marginBottom: 32,
+    color: '#172033',
+    marginBottom: 6,
+    letterSpacing: -0.7,
   },
+  subtitle: { color: '#68758a', fontSize: 13, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 28 },
   input: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
+    backgroundColor: '#f1f4f9',
+    borderRadius: 14,
     padding: 16,
-    color: '#fff',
+    color: '#172033',
     marginBottom: 16,
     fontSize: 16,
   },
   button: {
     width: '100%',
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#007aff',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -110,10 +111,10 @@ const styles = StyleSheet.create({
   outlineButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(28,48,82,0.14)',
   },
   outlineButtonText: {
-    color: '#fff',
+    color: '#24324a',
     fontSize: 16,
     fontWeight: '600',
   }

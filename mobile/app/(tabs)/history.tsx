@@ -145,21 +145,21 @@ export default function HistoryScreen() {
           <ActivityIndicator color="#0ea5e9" style={{ marginTop: 20 }} />
         ) : history.length === 0 ? (
           <GlassCard style={styles.historyCard}>
-            <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>No workouts logged yet.</Text>
+            <Text style={{ color: '#68758a', textAlign: 'center' }}>No workouts logged yet. Your completed sessions will appear here.</Text>
           </GlassCard>
         ) : (
           history.map((session) => (
             <GlassCard key={session.id} style={styles.historyCard}>
               <View style={styles.historyRow}>
                 <View style={styles.historyIconBox}>
-                  <Calendar color="#fff" size={20} />
+                  <Calendar color="#007aff" size={20} />
                 </View>
                 <View style={styles.historyDetails}>
                   <Text style={styles.historyDate}>{session.date}</Text>
                   <Text style={styles.historySplit}>{session.split}</Text>
                   <Text style={styles.historyStats}>{session.duration} • {session.volume}</Text>
                 </View>
-                <ChevronRight color="rgba(255,255,255,0.3)" size={24} />
+                <ChevronRight color="#8a96a8" size={24} />
               </View>
             </GlassCard>
           ))
@@ -172,31 +172,31 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   container: { flex: 1, padding: 16 },
-  headerTitle: { color: '#fff', fontSize: 28, fontWeight: '700', marginBottom: 24, marginTop: 16 },
-  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 12 },
+  headerTitle: { color: '#172033', fontSize: 28, fontWeight: '700', marginBottom: 24, marginTop: 16, letterSpacing: -0.8 },
+  sectionTitle: { color: '#172033', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 12 },
   
   weightCard: { padding: 20, marginBottom: 16 },
   weightRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  weightLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4 },
-  weightValue: { color: '#fff', fontSize: 28, fontWeight: '700' },
+  weightLabel: { color: '#68758a', fontSize: 14, marginBottom: 4 },
+  weightValue: { color: '#172033', fontSize: 28, fontWeight: '700' },
   inputGroup: { flexDirection: 'row', alignItems: 'center' },
-  input: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: 12, color: '#fff', width: 70, textAlign: 'center', marginRight: 8 },
-  logButton: { backgroundColor: '#0ea5e9', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
+  input: { backgroundColor: '#f0f3f8', borderRadius: 10, padding: 12, color: '#172033', width: 70, textAlign: 'center', marginRight: 8 },
+  logButton: { backgroundColor: '#007aff', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10 },
   logBtnText: { color: '#fff', fontWeight: 'bold' },
 
   analyticsGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   statCard: { flex: 1, padding: 16, alignItems: 'center' },
   statIcon: { marginBottom: 12 },
-  statValue: { color: '#fff', fontSize: 24, fontWeight: '700', marginBottom: 4 },
-  statLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  statValue: { color: '#172033', fontSize: 24, fontWeight: '700', marginBottom: 4 },
+  statLabel: { color: '#68758a', fontSize: 12 },
 
   historyCard: { padding: 16, marginBottom: 12 },
   historyRow: { flexDirection: 'row', alignItems: 'center' },
-  historyIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  historyIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,122,255,0.10)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   historyDetails: { flex: 1 },
-  historyDate: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  historySplit: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginVertical: 2 },
-  historyStats: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
+  historyDate: { color: '#172033', fontSize: 16, fontWeight: '600' },
+  historySplit: { color: '#4d5d73', fontSize: 14, marginVertical: 2 },
+  historyStats: { color: '#7a8799', fontSize: 12 },
 });

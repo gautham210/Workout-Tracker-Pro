@@ -92,7 +92,7 @@ export default function HydrationManager({ completedSetsCount }) {
       style={{ 
         position: 'fixed', 
         top: '0', left: '0', right: '0', bottom: '0', 
-        background: 'rgba(6,9,12,0.85)', 
+        background: 'rgba(21,32,51,0.22)',
         backdropFilter: 'blur(10px)', 
         zIndex: 500, 
         display: 'flex', 
@@ -106,11 +106,11 @@ export default function HydrationManager({ completedSetsCount }) {
         style={{ 
           width: '100%', 
           maxWidth: '380px', 
-          background: 'rgba(11, 15, 20, 0.98)', 
-          border: '1px solid rgba(255,255,255,0.1)', 
+          background: 'rgba(255,255,255,0.98)',
+          border: '1px solid rgba(35,55,88,0.10)',
           borderRadius: '24px', 
           padding: '24px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+          boxShadow: '0 20px 48px rgba(30,50,82,0.18)',
           textAlign: 'center',
           animation: 'pageFadeIn 0.3s cubic-bezier(0.2,0.8,0.2,1) forwards'
         }}
@@ -120,11 +120,11 @@ export default function HydrationManager({ completedSetsCount }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={18} color="var(--accent-hover)" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'white' }}>Hydration Config</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>Hydration Config</h3>
               </div>
               <button 
                 onClick={() => setShowSettings(false)} 
-                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 <X size={16} />
               </button>
@@ -144,11 +144,11 @@ export default function HydrationManager({ completedSetsCount }) {
                   key={opt.key}
                   onClick={() => saveSettings(opt.key, opt.key === 'time' ? 15 : 4)}
                   style={{
-                    background: type === opt.key ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.03)',
-                    border: type === opt.key ? '1px solid var(--accent-hover)' : '1px solid rgba(255,255,255,0.06)',
+                    background: type === opt.key ? 'rgba(0,122,255,0.10)' : '#f5f7fb',
+                    border: type === opt.key ? '1px solid var(--accent-hover)' : '1px solid rgba(35,55,88,0.08)',
                     borderRadius: '12px',
                     padding: '12px 16px',
-                    color: 'white',
+                    color: 'var(--text-primary)',
                     fontWeight: '700',
                     fontSize: '13px',
                     cursor: 'pointer',
@@ -177,11 +177,11 @@ export default function HydrationManager({ completedSetsCount }) {
                       onClick={() => saveSettings(type, val)}
                       style={{
                         flex: 1,
-                        background: interval === val ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.03)',
-                        border: interval === val ? '1px solid var(--accent-hover)' : '1px solid rgba(255,255,255,0.06)',
+                        background: interval === val ? 'rgba(0,122,255,0.10)' : '#f5f7fb',
+                        border: interval === val ? '1px solid var(--accent-hover)' : '1px solid rgba(35,55,88,0.08)',
                         borderRadius: '10px',
                         padding: '10px',
-                        color: 'white',
+                        color: 'var(--text-primary)',
                         fontWeight: '800',
                         fontSize: '12px',
                         cursor: 'pointer',
@@ -200,7 +200,7 @@ export default function HydrationManager({ completedSetsCount }) {
             <div style={{ background: 'rgba(0,122,255,0.1)', padding: '16px', borderRadius: '50%', display: 'inline-flex', marginBottom: '16px', color: 'var(--accent-hover)' }}>
               <Droplet size={36} fill="var(--accent-hover)" />
             </div>
-            <h3 style={{ margin: '0 0 8px', fontSize: '22px', fontWeight: '900', color: 'white', letterSpacing: '-0.5px' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '22px', fontWeight: '900', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
               💧 Hydration Check
             </h3>
             <p style={{ margin: '0 0 24px', fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', fontWeight: '500' }}>

@@ -91,7 +91,7 @@ export default function CoachScreen() {
           <TextInput
             style={styles.input}
             placeholder="Ask about workouts, form, or plateaus..."
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholderTextColor="#8a96a8"
             value={input}
             onChangeText={setInput}
             onSubmitEditing={sendMessage}
@@ -110,7 +110,7 @@ export default function CoachScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -118,9 +118,9 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 24,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)'
+    borderBottomColor: 'rgba(28,48,82,0.08)'
   },
-  headerTitle: { color: '#fff', fontSize: 24, fontWeight: '700', marginLeft: 12 },
+  headerTitle: { color: '#172033', fontSize: 24, fontWeight: '700', marginLeft: 12, letterSpacing: -0.6 },
   
   chatArea: { flex: 1 },
   messageWrapper: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-end' },
@@ -128,27 +128,27 @@ const styles = StyleSheet.create({
   messageWrapperBot: { justifyContent: 'flex-start' },
   
   botAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0ea5e9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#24324a', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
   
   messageCard: { padding: 16, maxWidth: '75%' },
-  userCard: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderColor: 'rgba(14, 165, 233, 0.3)' },
-  botCard: { backgroundColor: 'rgba(255,255,255,0.05)' },
-  messageText: { color: '#fff', fontSize: 16, lineHeight: 24 },
+  userCard: { backgroundColor: 'rgba(0, 122, 255, 0.12)', borderColor: 'rgba(0, 122, 255, 0.24)' },
+  botCard: { backgroundColor: 'rgba(255,255,255,0.9)' },
+  messageText: { color: '#24324a', fontSize: 16, lineHeight: 24 },
   
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(28,48,82,0.08)',
     alignItems: 'center'
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.86)',
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    color: '#fff',
+    color: '#172033',
     fontSize: 16,
     marginRight: 12,
   },
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#007aff',
     justifyContent: 'center',
     alignItems: 'center',
   },

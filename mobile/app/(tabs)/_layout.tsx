@@ -21,12 +21,12 @@ export default function TabLayout() {
         },
         tabBarBackground: () => (
           <View style={styles.tabBarBackground}>
-            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={38} tint="light" style={StyleSheet.absoluteFill} />
           </View>
         ),
         tabBarShowLabel: false,
-        tabBarActiveTintColor: '#0ea5e9',
-        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.4)',
+        tabBarActiveTintColor: '#007aff',
+        tabBarInactiveTintColor: '#7a8799',
       }}>
       <Tabs.Screen
         name="index"
@@ -67,8 +67,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill as object,
     borderRadius: 32,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.95)',
   },
 });

@@ -73,7 +73,7 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#fff" size={24} />
+          <ArrowLeft color="#24324a" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings & Import</Text>
         <View style={{ width: 40 }} />
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
             multiline
             numberOfLines={8}
             placeholder="e.g. Monday Chest Day: Bench 100kg x 8, 100kg x 6. Incline DB 40kg 3x10..."
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor="#9aa5b5"
             value={logText}
             onChangeText={setLogText}
             textAlignVertical="top"
@@ -146,32 +146,32 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)'
+    borderBottomColor: 'rgba(28,48,82,0.08)'
   },
   backBtn: { padding: 8 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  headerTitle: { color: '#172033', fontSize: 18, fontWeight: '600' },
   container: { flex: 1, padding: 16 },
-  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 12 },
+  sectionTitle: { color: '#172033', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 12 },
   card: { padding: 20, marginBottom: 16 },
-  description: { color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  description: { color: '#68758a', fontSize: 14, lineHeight: 20, marginBottom: 16 },
   textArea: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    color: '#fff',
+    color: '#172033',
     fontSize: 16,
     minHeight: 120,
     marginBottom: 16,
   },
   importButton: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#007aff',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -180,9 +180,9 @@ const styles = StyleSheet.create({
   },
   disabledBtn: { opacity: 0.5 },
   importBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  settingText: { color: '#fff', fontSize: 16 },
-  settingValue: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(28,48,82,0.06)' },
+  settingText: { color: '#172033', fontSize: 16 },
+  settingValue: { color: '#68758a', fontSize: 16 },
   logoutButton: { marginTop: 24, padding: 16, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)', alignItems: 'center' },
   logoutText: { color: '#ef4444', fontSize: 16, fontWeight: '600' },
 });

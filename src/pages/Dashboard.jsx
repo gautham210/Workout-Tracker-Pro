@@ -167,7 +167,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('workout_sessions')
         .select('id, date, split_type, split_day')
         .eq('user_id', user.id)
@@ -190,6 +190,7 @@ export default function Dashboard() {
   const includeRestDays = profile.include_rest_days ?? false;
   const restDays        = profile.rest_days         ?? [];
   const currentStreak   = computeStreak(sessions, includeRestDays, restDays);
+  const consistencyPct  = computeConsistencyPct(sessions, includeRestDays, restDays);
 
   // ── Next session (priority-ordered, no fake values) ───────────────────────────
   const nextSession = resolveNextSession(profile, sessions);
@@ -245,10 +246,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="page-enter">
+    <div className="page-enter dashboard-page">
 
       {/* ── Hero ── */}
-      <div style={{ marginBottom: '40px', marginTop: '16px' }}>
+      <div className="dashboard-hero" style={{ marginBottom: '28px', marginTop: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <Flame
             size={20}
@@ -261,14 +262,29 @@ export default function Dashboard() {
         </div>
         <h1
           className="title"
-          style={{ fontSize: '48px', margin: 0, letterSpacing: '-1.5px', background: 'linear-gradient(180deg,#fff 0%,rgba(255,255,255,0.7) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+          style={{ fontSize: '48px', margin: 0 }}
         >
           {sessions.length === 0 ? `Welcome, ${displayName}.` : `Back again, ${displayName}.`}
         </h1>
         <p style={{ marginTop: '12px', fontSize: '18px', color: 'var(--text-secondary)', fontWeight: '500' }}>
-          Endurance is earned, not given.
+          Your training space is ready when you are.
         </p>
       </div>
+
+      <section className="dashboard-pulse" aria-label="Training snapshot">
+        <div className="dashboard-pulse-item">
+          <span>Training streak</span>
+          <strong>{currentStreak}<small> days</small></strong>
+        </div>
+        <div className="dashboard-pulse-item">
+          <span>30-day consistency</span>
+          <strong>{consistencyPct}<small>%</small></strong>
+        </div>
+        <div className="dashboard-pulse-item">
+          <span>Sessions logged</span>
+          <strong>{sessions.length}</strong>
+        </div>
+      </section>
 
       {/* ── Insights ── */}
       {insights.length > 0 && (

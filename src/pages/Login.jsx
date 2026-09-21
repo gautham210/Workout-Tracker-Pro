@@ -41,8 +41,8 @@ export default function Login() {
 
   if (showVerify) {
     return (
-      <div className="container page-enter" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '20px' }}>
-         <div className="glass card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
+      <div className="auth-shell page-enter">
+         <div className="glass card auth-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
             <div style={{ background: 'rgba(0,122,255,0.1)', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 0 40px rgba(0,122,255,0.3)' }}>
                <Mail size={40} color="var(--accent-color)" />
             </div>
@@ -71,16 +71,16 @@ export default function Login() {
   }
 
   return (
-    <div className="container page-enter" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '100vh', paddingBottom: '20px' }}>
-      <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <div style={{ background: 'rgba(255,255,255,0.03)', display: 'inline-block', padding: '20px', borderRadius: '50%', marginBottom: '16px', boxShadow: '0 0 40px rgba(255,255,255,0.05)' }}>
-          <Dumbbell size={48} color="white" />
+    <div className="auth-shell page-enter">
+      <div className="auth-hero">
+        <div className="auth-mark">
+          <Dumbbell size={31} color="white" />
         </div>
-        <h1 className="title" style={{ margin: 0, fontSize: '42px', letterSpacing: '-1.5px', background: 'linear-gradient(135deg, #2563eb, #60a5fa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Workout Tracker Pro</h1>
-        <p className="subtitle" style={{ marginTop: '12px', fontSize: '15px' }}>Build Something Strong.</p>
+        <h1 className="title" style={{ margin: 0, fontSize: '42px' }}>Workout Tracker</h1>
+        <p className="subtitle" style={{ marginTop: '12px', fontSize: '11px' }}>Your training, in focus</p>
       </div>
 
-      <div className="glass card" style={{ padding: '32px' }}>
+      <div className="glass card auth-card" style={{ padding: '32px' }}>
         <h2 style={{ fontSize: '28px', marginBottom: '32px', fontWeight: '800' }}>{isLogin ? 'Welcome back.' : 'Join the elite.'}</h2>
         
         {error && (

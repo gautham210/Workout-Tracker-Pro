@@ -84,7 +84,7 @@ export default function DashboardScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.78)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(28,48,82,0.08)' }}
               onPress={() => {
                 if (syncStatus.includes('failed')) {
                   if (user) import('../../lib/sync').then(({ processOutbox }) => processOutbox(user.id, true));
@@ -101,7 +101,7 @@ export default function DashboardScreen() {
               ) : (
                 <CloudOff color="#ef4444" size={16} />
               )}
-              <Text style={{ color: 'white', fontSize: 12, marginLeft: 6 }}>
+              <Text style={{ color: '#24324a', fontSize: 12, marginLeft: 6, fontWeight: '700' }}>
                 {syncStatus.includes('failed') ? 'Sync Failed [Retry]' : syncStatus}
               </Text>
             </TouchableOpacity>
@@ -114,10 +114,10 @@ export default function DashboardScreen() {
         {/* Crash Recovery Prompt */}
         {unfinishedSessionId && (
           <GlassCard style={[styles.insightCard, { borderColor: '#ef4444', borderWidth: 1 }]}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>
+            <Text style={{ color: '#172033', fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>
               Active Workout Detected
             </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', marginBottom: 16 }}>
+            <Text style={{ color: '#68758a', marginBottom: 16 }}>
               It looks like you didn't finish your last workout session.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -131,7 +131,7 @@ export default function DashboardScreen() {
                 style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 12, borderRadius: 8, alignItems: 'center' }}
                 onPress={discardSession}
               >
-                <Text style={{ color: '#fff', fontWeight: '600' }}>Discard</Text>
+                <Text style={{ color: '#24324a', fontWeight: '600' }}>Discard</Text>
               </TouchableOpacity>
             </View>
           </GlassCard>
@@ -141,11 +141,11 @@ export default function DashboardScreen() {
         {nextWorkout && (
           <GlassCard style={{ marginBottom: 16, padding: 20 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>UPCOMING SESSION</Text>
+              <Text style={{ color: '#68758a', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>UPCOMING SESSION</Text>
               <Text style={{ color: '#10b981', fontSize: 14, fontWeight: 'bold' }}>{nextWorkout.split}</Text>
             </View>
-            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginTop: 8 }}>{nextWorkout.focus}</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 4 }}>{nextWorkout.reason}</Text>
+            <Text style={{ color: '#172033', fontSize: 22, fontWeight: 'bold', marginTop: 8 }}>{nextWorkout.focus}</Text>
+            <Text style={{ color: '#68758a', fontSize: 14, marginTop: 4 }}>{nextWorkout.reason}</Text>
             <TouchableOpacity 
               style={{ marginTop: 16, backgroundColor: '#0ea5e9', padding: 12, borderRadius: 8, alignItems: 'center' }}
               onPress={() => router.push('/(tabs)/workout')}
@@ -179,7 +179,7 @@ export default function DashboardScreen() {
         
         {insights.length === 0 && !refreshing ? (
           <GlassCard style={styles.insightCard}>
-            <Text style={{ color: 'rgba(255,255,255,0.6)' }}>More data needed to generate insights.</Text>
+            <Text style={{ color: '#68758a' }}>More data needed to generate insights.</Text>
           </GlassCard>
         ) : (
           insights.map(insight => (
@@ -212,34 +212,34 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   container: { flex: 1, padding: 16 },
   header: { marginTop: 24, marginBottom: 32, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingsBtn: { width: 44, height: 44, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  greeting: { color: 'rgba(255,255,255,0.7)', fontSize: 18 },
-  name: { color: '#fff', fontSize: 36, fontWeight: 'bold' },
+  settingsBtn: { width: 44, height: 44, backgroundColor: 'rgba(255,255,255,0.84)', borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(28,48,82,0.08)' },
+  greeting: { color: '#68758a', fontSize: 18 },
+  name: { color: '#172033', fontSize: 36, fontWeight: 'bold', letterSpacing: -1.2 },
   
   quickActions: { flexDirection: 'row', gap: 16, marginBottom: 32 },
   actionButton: { flex: 1 },
   actionCard: { alignItems: 'center', padding: 24 },
-  actionText: { color: '#fff', marginTop: 12, fontSize: 16, fontWeight: '600' },
+  actionText: { color: '#172033', marginTop: 12, fontSize: 16, fontWeight: '600' },
   
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { color: '#fff', fontSize: 22, fontWeight: '700', marginRight: 8 },
+  sectionTitle: { color: '#172033', fontSize: 22, fontWeight: '700', marginRight: 8 },
   
   insightCard: { padding: 20, marginBottom: 16 },
   insightHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  insightTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  insightTitle: { color: '#172033', fontSize: 18, fontWeight: 'bold' },
   
-  insightLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 12, marginBottom: 4 },
-  insightText: { color: '#fff', fontSize: 14, lineHeight: 20 },
+  insightLabel: { color: '#7a8799', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 12, marginBottom: 4 },
+  insightText: { color: '#24324a', fontSize: 14, lineHeight: 20 },
   
   actionBox: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(28,48,82,0.08)',
   },
-  insightLabelAction: { color: '#0ea5e9', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 4 },
-  insightTextAction: { color: '#fff', fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  insightLabelAction: { color: '#007aff', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 4 },
+  insightTextAction: { color: '#24324a', fontSize: 14, lineHeight: 20, fontWeight: '500' },
 });

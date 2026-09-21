@@ -63,14 +63,14 @@ export default function WorkoutTimer({ activeExerciseName, triggerCount, onSkip 
   if (!isActive) return null;
 
   return (
-    <View style={{ padding: 16, backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 12, alignItems: 'center', marginBottom: 16, width: 200 }}>
+    <View style={{ padding: 5, backgroundColor: 'rgba(255,255,255,0.72)', borderRadius: 22, alignItems: 'center', marginBottom: 16, width: 200 }}>
       <GlassCard strong style={{ width: '100%', alignItems: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Timer color="#0ea5e9" size={20} />
-          <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</Text>
+          <Timer color="#007aff" size={20} />
+          <Text style={{ color: '#172033', fontSize: 18, fontWeight: 'bold' }}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</Text>
         </View>
         <TouchableOpacity onPress={() => setIsActive(false)} style={{ marginTop: 8, padding: 8 }}>
-          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Skip</Text>
+          <Text style={{ color: '#68758a', fontSize: 12 }}>Skip</Text>
         </TouchableOpacity>
       </GlassCard>
     </View>

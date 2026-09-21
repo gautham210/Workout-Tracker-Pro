@@ -1,92 +1,72 @@
 import { memo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Home, Dumbbell, History as HistoryIcon, Activity, User, PieChart, Upload, Sparkles } from 'lucide-react';
+import {
+  Activity, BrainCircuit, Dumbbell, History as HistoryIcon, Home, Sparkles,
+  Upload, User, Users, Weight,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NetworkToast from './NetworkToast';
+
+const primaryItems = [
+  { to: '/', label: 'Home', icon: Home, end: true },
+  { to: '/workout', label: 'Train', icon: Dumbbell },
+  { to: '/history', label: 'History', icon: HistoryIcon },
+  { to: '/analytics', label: 'Progress', icon: Activity },
+];
+
+const studioItems = [
+  { to: '/ai-coach', label: 'AI Coach', icon: Sparkles },
+  { to: '/import', label: 'Workout import', icon: Upload },
+  { to: '/bodyweight', label: 'Body metrics', icon: Weight },
+  { to: '/community', label: 'Athlete space', icon: Users },
+  { to: '/profile', label: 'Profile & settings', icon: User },
+];
+
+function NavigationLink({ item, compact = false }) {
+  const Icon = item.icon;
+  return (
+    <NavLink to={item.to} end={item.end} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+      <Icon aria-hidden="true" size={compact ? 20 : 19} strokeWidth={2.2} />
+      <span>{item.label}</span>
+    </NavLink>
+  );
+}
 
 const MainLayout = () => {
   const { networkError } = useAuth();
 
   return (
     <div className="app-layout">
-      <div className="particles-layer"></div>
-      <nav className="desktop-sidebar glass" style={{ borderRadius: 0, borderTop: 'none', borderBottom: 'none', borderLeft: 'none' }}>
-        <div style={{ padding: '0 16px', marginBottom: '40px', marginTop: '16px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0, background: 'linear-gradient(135deg, #2563eb, #60a5fa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Workout Tracker Pro</h2>
-            <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Training Intelligence</span>
+      <div className="particles-layer" aria-hidden="true" />
+      <aside className="desktop-sidebar" aria-label="Primary navigation">
+        <div className="brand-lockup">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <div className="brand-mark"><Dumbbell size={20} strokeWidth={2.5} /></div>
+            <div>
+              <p className="brand-title">Workout Tracker</p>
+              <span className="brand-kicker">Train with intent</span>
+            </div>
           </div>
         </div>
-        <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
-          <Home size={22} />
-          <span>Dashboard</span>
-        </NavLink>
-        <NavLink to="/workout" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Dumbbell size={22} />
-          <span>Workout</span>
-        </NavLink>
-        <NavLink to="/history" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <HistoryIcon size={22} />
-          <span>History</span>
-        </NavLink>
-        <NavLink to="/bodyweight" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Activity size={22} />
-          <span>Bodyweight</span>
-        </NavLink>
-        <NavLink to="/analytics" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <PieChart size={22} />
-          <span>Intelligence</span>
-        </NavLink>
-        <NavLink to="/import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Upload size={22} />
-          <span>AI Import</span>
-        </NavLink>
-        <NavLink to="/ai-coach" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Sparkles size={22} />
-          <span>AI Coach</span>
-        </NavLink>
-        <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <User size={22} />
-          <span>Identity</span>
-        </NavLink>
+        <div className="nav-group">
+          {primaryItems.map((item) => <NavigationLink item={item} key={item.to} />)}
+        </div>
+        <div className="nav-section-label">Your studio</div>
+        <div className="nav-group">
+          {studioItems.map((item) => <NavigationLink item={item} key={item.to} />)}
+        </div>
+        <div style={{ marginTop: 'auto', padding: '18px 12px 4px', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 650, lineHeight: 1.45 }}>
+          <BrainCircuit size={15} style={{ verticalAlign: 'middle', marginRight: 7, color: 'var(--accent-color)' }} />
+          Your data stays yours.
+        </div>
+      </aside>
+
+      <main className="main-content-wrapper"><Outlet /></main>
+
+      <nav className="mobile-bottom-nav" aria-label="Primary navigation">
+        {primaryItems.map((item) => <NavigationLink item={item} compact key={item.to} />)}
+        <NavigationLink item={{ to: '/profile', label: 'Profile', icon: User }} compact />
       </nav>
-
-      <div className="main-content-wrapper">
-        <Outlet />
-      </div>
-
-      <nav className="mobile-bottom-nav" style={{ background: 'rgba(10, 14, 20, 0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.08)', borderRadius: 0, borderBottom: 'none', borderLeft: 'none', borderRight: 'none' }}>
-        <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
-          <Home size={22} />
-          <span>Home</span>
-        </NavLink>
-        <NavLink to="/workout" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Dumbbell size={22} />
-          <span>Workout</span>
-        </NavLink>
-        <NavLink to="/history" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <HistoryIcon size={22} />
-          <span>History</span>
-        </NavLink>
-        <NavLink to="/import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Upload size={22} />
-          <span>Import</span>
-        </NavLink>
-        <NavLink to="/ai-coach" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <Sparkles size={22} />
-          <span>Coach</span>
-        </NavLink>
-        <NavLink to="/analytics" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <PieChart size={22} />
-          <span>Intel</span>
-        </NavLink>
-        <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <User size={22} />
-          <span>Profile</span>
-        </NavLink>
-      </nav>
-
-      {/* Global network status toast */}
       <NetworkToast supabaseError={networkError} />
     </div>
   );

@@ -239,7 +239,7 @@ export default function ActiveWorkoutScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <X color="#fff" size={24} />
+          <X color="#24324a" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Active Session</Text>
         <TouchableOpacity onPress={finishWorkout}>
@@ -277,7 +277,7 @@ export default function ActiveWorkoutScreen() {
                   <TextInput 
                     style={styles.input}
                     placeholder="0"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholderTextColor="#9aa5b5"
                     keyboardType="numeric"
                     value={set.weight_kg}
                     onChangeText={(val) => {
@@ -295,7 +295,7 @@ export default function ActiveWorkoutScreen() {
                   <TextInput 
                     style={styles.input}
                     placeholder="0"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholderTextColor="#9aa5b5"
                     keyboardType="numeric"
                     value={set.reps}
                     onChangeText={(val) => {
@@ -314,7 +314,7 @@ export default function ActiveWorkoutScreen() {
                   <TextInput 
                     style={styles.inputSlim}
                     placeholder="-"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
+                    placeholderTextColor="#9aa5b5"
                     keyboardType="numeric"
                     value={set.rpe}
                     onChangeText={(val) => {
@@ -333,7 +333,7 @@ export default function ActiveWorkoutScreen() {
                   <TextInput 
                     style={styles.inputSlim}
                     placeholder="-"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
+                    placeholderTextColor="#9aa5b5"
                     keyboardType="numeric"
                     value={set.rir}
                     onChangeText={(val) => {
@@ -378,57 +378,57 @@ export default function ActiveWorkoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)'
+    borderBottomColor: 'rgba(28,48,82,0.08)'
   },
   closeBtn: { padding: 8 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  finishText: { color: '#0ea5e9', fontSize: 16, fontWeight: '700', padding: 8 },
+  headerTitle: { color: '#172033', fontSize: 18, fontWeight: '600' },
+  finishText: { color: '#007aff', fontSize: 16, fontWeight: '700', padding: 8 },
   carousel: { flex: 1 },
   page: { width, padding: 16, justifyContent: 'center' },
   card: { padding: 16 },
-  exerciseName: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  muscleGroup: { color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 20 },
+  exerciseName: { color: '#172033', fontSize: 22, fontWeight: 'bold' },
+  muscleGroup: { color: '#68758a', fontSize: 14, marginBottom: 20 },
   setsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
     paddingHorizontal: 4,
   },
-  colHeader: { color: 'rgba(255,255,255,0.5)', fontSize: 13, width: 45, textAlign: 'center' },
-  colHeaderSlim: { color: 'rgba(255,255,255,0.5)', fontSize: 12, width: 30, textAlign: 'center' },
+  colHeader: { color: '#7a8799', fontSize: 13, width: 45, textAlign: 'center' },
+  colHeaderSlim: { color: '#7a8799', fontSize: 12, width: 30, textAlign: 'center' },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: '#f0f3f8',
     padding: 6,
     borderRadius: 8,
     marginBottom: 6,
   },
   setCompletedRow: { backgroundColor: 'rgba(14, 165, 233, 0.15)' },
-  setText: { color: '#fff', fontSize: 14, width: 35, textAlign: 'center' },
+  setText: { color: '#24324a', fontSize: 14, width: 35, textAlign: 'center' },
   input: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: '#fff',
     borderRadius: 6,
     width: 50,
     height: 36,
-    color: '#fff',
+    color: '#172033',
     textAlign: 'center',
     fontSize: 15,
   },
   inputSlim: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: '#fff',
     borderRadius: 6,
     width: 35,
     height: 36,
-    color: '#fff',
+    color: '#172033',
     textAlign: 'center',
     fontSize: 13,
   },
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#e5ebf4',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 4,
@@ -455,6 +455,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 4 },
-  activeDot: { backgroundColor: '#0ea5e9', width: 12, height: 12, borderRadius: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#d5deeb', marginHorizontal: 4 },
+  activeDot: { backgroundColor: '#007aff', width: 12, height: 12, borderRadius: 6 },
 });

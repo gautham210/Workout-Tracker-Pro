@@ -148,7 +148,7 @@ export default function NutritionScreen() {
           <TextInput
             style={styles.input}
             placeholder="Log a meal or ask about macros..."
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholderTextColor="#8a96a8"
             value={input}
             onChangeText={setInput}
             onSubmitEditing={sendMessage}
@@ -167,7 +167,7 @@ export default function NutritionScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -175,9 +175,9 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 24,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)'
+    borderBottomColor: 'rgba(28,48,82,0.08)'
   },
-  headerTitle: { color: '#fff', fontSize: 24, fontWeight: '700', marginLeft: 12 },
+  headerTitle: { color: '#172033', fontSize: 24, fontWeight: '700', marginLeft: 12, letterSpacing: -0.6 },
   
   chatArea: { flex: 1 },
   messageWrapper: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-end' },
@@ -185,12 +185,12 @@ const styles = StyleSheet.create({
   messageWrapperBot: { justifyContent: 'flex-start' },
   
   botAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#10b981', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#24324a', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
   
   messageCard: { padding: 16, maxWidth: '75%' },
-  userCard: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' },
-  botCard: { backgroundColor: 'rgba(255,255,255,0.05)' },
-  messageText: { color: '#fff', fontSize: 16, lineHeight: 24 },
+  userCard: { backgroundColor: 'rgba(52, 199, 89, 0.12)', borderColor: 'rgba(52, 199, 89, 0.25)' },
+  botCard: { backgroundColor: 'rgba(255,255,255,0.9)' },
+  messageText: { color: '#24324a', fontSize: 16, lineHeight: 24 },
   
   imagePreviewContainer: {
     paddingHorizontal: 16,
@@ -219,25 +219,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(28,48,82,0.08)',
     alignItems: 'center'
   },
   cameraBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.86)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.86)',
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    color: '#fff',
+    color: '#172033',
     fontSize: 16,
     marginRight: 12,
   },

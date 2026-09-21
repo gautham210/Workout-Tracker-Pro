@@ -55,7 +55,7 @@ export default function WorkoutBuilderScreen() {
                   <Text style={styles.muscleGroup}>{ex.muscle_group}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setSelectedExercises(prev => prev.filter((_, i) => i !== index))}>
-                  <Trash2 color="rgba(255,255,255,0.4)" size={20} />
+                  <Trash2 color="#7a8799" size={20} />
                 </TouchableOpacity>
               </View>
             </GlassCard>
@@ -90,16 +90,13 @@ export default function WorkoutBuilderScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
   container: {
     flex: 1,
     padding: 16,
   },
   headerTitle: {
-    color: '#fff',
+    color: '#172033',
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 20,
@@ -118,12 +115,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   exerciseName: {
-    color: '#fff',
+    color: '#172033',
     fontSize: 18,
     fontWeight: '600',
   },
   muscleGroup: {
-    color: 'rgba(255,255,255,0.5)',
+    color: '#748198',
     fontSize: 14,
     marginTop: 4,
   },
@@ -133,13 +130,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
+    borderColor: 'rgba(0, 122, 255, 0.32)',
     borderRadius: 16,
     borderStyle: 'dashed',
     marginTop: 8,
   },
   addText: {
-    color: '#0ea5e9',
+    color: '#007aff',
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
@@ -148,7 +145,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   startButton: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#007aff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

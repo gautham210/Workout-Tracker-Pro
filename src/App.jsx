@@ -12,6 +12,7 @@ const Analytics = lazy(() => import('./pages/Analytics'));
 const Profile = lazy(() => import('./pages/Profile'));
 const ImportWorkout = lazy(() => import('./pages/ImportWorkout'));
 const AICoach = lazy(() => import('./pages/AICoach'));
+const Community = lazy(() => import('./pages/Community'));
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="import" element={<ImportWorkout />} />
             <Route path="ai-coach" element={<AICoach />} />
+            <Route path="community" element={<Community />} />
             <Route path="profile" element={<Profile />} />
           </Route>
         </Routes>
