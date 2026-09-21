@@ -45,15 +45,54 @@ function artworkFor(exercise) {
   return null;
 }
 
-function MovementGlyph({ pattern }) {
-  const poses = {
-    horizontal_press: 'M24 48h48M42 29l12 19 14-17M32 68h50', vertical_press: 'M48 67V26m0 0-13 13m13-13 13 13M27 24h42',
-    horizontal_pull: 'M25 43h50m-11-12 11 12-11 12M35 66l13-23 13 23', vertical_pull: 'M24 26h48M48 26v38m-13-12 13 12 13-12',
-    squat: 'M48 24v22L31 64m17-18 18 18M26 27h44', hinge: 'M28 31l22 18 20-14M50 49 35 68m15-19 18 19M22 70h52',
-    curl: 'M48 26v38M31 39l17 13 17-13M26 68h44', raise: 'M48 69V40M25 30l23 10 23-10M48 40V22',
-    knee_flexion: 'M27 59h42M32 43l16 16 16-16M22 70h52', calf_raise: 'M48 25v37M32 65h32M27 70h42', anti_extension: 'M21 61h58M32 50h32M34 42l-13 19m45-19 13 19', movement: 'M48 23c8 0 14 6 14 14S56 51 48 51 34 45 34 37s6-14 14-14Zm0 30v23M28 69l20-16 20 16',
+// The Stitch export only contains photography for six specific movements.
+// For the rest of the catalogue we use this local, movement-specific scene
+// system: each visual depicts the equipment and posture for that movement,
+// rather than falling back to a letter, a generic dumbbell, or unrelated art.
+function MovementScene({ pattern }) {
+  const label = String(pattern || 'movement').replace(/_/g, ' ');
+  return <svg className="exercise-movement-scene" viewBox="0 0 160 118" role="img" aria-label={`${label} exercise illustration`}>
+    <defs>
+      <linearGradient id="scene-skin" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f1b489"/><stop offset="1" stopColor="#be6e5a"/></linearGradient>
+      <linearGradient id="scene-kit" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#1f4e79"/><stop offset="1" stopColor="#0b2542"/></linearGradient>
+      <linearGradient id="scene-metal" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#9ed8fb"/><stop offset="1" stopColor="#3275aa"/></linearGradient>
+    </defs>
+    <rect className="scene-floor" x="14" y="93" width="132" height="7" rx="3.5" />
+    {sceneFor(pattern)}
+  </svg>;
+}
+
+function Athlete({ x = 80, y = 43, rotate = 0, pose = 'stand' }) {
+  const limbs = {
+    stand: <><path className="scene-skin" d="M-10 38 4 61 13 61 4 30Z"/><path className="scene-skin" d="M4 30 18 61 27 61 13 24Z"/><path className="scene-kit" d="M-10 14 13 11 20 32 2 40-13 29Z"/><path className="scene-skin" d="M-13 22-28 41-23 45-4 30ZM17 20 30 38 35 34 21 12Z"/></>,
+    squat: <><path className="scene-kit" d="M-12 15 15 10 19 33-4 42-16 30Z"/><path className="scene-skin" d="M-4 38-25 57-18 64 7 47ZM8 39 26 55 20 62 0 47Z"/><path className="scene-skin" d="M-12 23-30 17-32 23-14 30ZM15 21 33 16 35 22 18 29Z"/></>,
+    hinge: <><path className="scene-kit" d="M-12 17 16 20 22 36 4 43-17 31Z"/><path className="scene-skin" d="M3 39-16 58-8 64 13 47ZM12 40 32 54 27 62 5 47Z"/><path className="scene-skin" d="M-14 28-31 46-26 51-5 35ZM17 30 31 49 36 45 21 25Z"/></>,
+    curl: <><path className="scene-kit" d="M-11 14 13 12 20 34 3 40-14 29Z"/><path className="scene-skin" d="M-12 24-25 37-20 43-5 31ZM16 23 28 36 23 42 9 29Z"/><path className="scene-skin" d="M-8 38-18 62-10 64 2 42ZM8 39 20 62 28 60 16 37Z"/></>,
+    plank: <><path className="scene-kit" d="M-28 22 13 25 27 39 10 47-30 37Z"/><path className="scene-skin" d="M-26 33-39 56-33 59-18 40ZM16 41 34 59 40 54 22 34Z"/><path className="scene-skin" d="M-2 43-13 64-7 67 6 47ZM18 43 33 59 38 54 25 39Z"/></>,
   };
-  return <svg className="exercise-motion-glyph" viewBox="0 0 96 96" role="img" aria-label={`${String(pattern).replace(/_/g, ' ')} movement illustration`}><path d={poses[pattern] || poses.movement} /><circle cx="48" cy="15" r="5" /></svg>;
+  return <g transform={`translate(${x} ${y}) rotate(${rotate})`}><circle className="scene-skin" cx="-2" cy="0" r="9"/>{limbs[pose] || limbs.stand}</g>;
+}
+
+function Barbell({ x, y, width = 72, rotate = 0 }) { return <g transform={`translate(${x} ${y}) rotate(${rotate})`}><rect className="scene-bar" x={-width / 2} y="-2" width={width} height="4" rx="2"/><rect className="scene-weight" x={-width / 2 - 5} y="-8" width="5" height="16" rx="2"/><rect className="scene-weight" x={width / 2} y="-8" width="5" height="16" rx="2"/></g>; }
+function Dumbbell({ x, y, rotate = 0 }) { return <g transform={`translate(${x} ${y}) rotate(${rotate})`}><rect className="scene-bar" x="-10" y="-2" width="20" height="4" rx="2"/><rect className="scene-weight" x="-14" y="-6" width="5" height="12" rx="2"/><rect className="scene-weight" x="9" y="-6" width="5" height="12" rx="2"/></g>; }
+function Machine({ x = 25, y = 15, cable = false }) { return <g><path className="scene-machine" d={`M${x} ${y + 75}V${y}h19v75M${x - 4} ${y + 75}h27`} />{cable && <><circle className="scene-pulley" cx={x + 9} cy={y + 8} r="4"/><path className="scene-cable" d={`M${x + 9} ${y + 12}v38l34 15`} /></>}</g>; }
+function sceneFor(pattern) {
+  switch (pattern) {
+    case 'horizontal_press': return <><path className="scene-bench" d="M37 76h69l-5 7H41Z"/><path className="scene-bench" d="M49 82l-9 14m50-14 9 14"/><Athlete x={79} y={52} rotate={-86} pose="stand"/><Barbell x={79} y={32} width={91}/></>;
+    case 'incline_press': return <><path className="scene-bench" d="M42 76 92 50l5 8-51 27Z"/><path className="scene-bench" d="M54 82 47 96m37-28 11 28"/><Athlete x={76} y={53} rotate={-53} pose="stand"/><Dumbbell x={56} y={33} rotate={-8}/><Dumbbell x={99} y={33} rotate={8}/></>;
+    case 'vertical_pull': return <><Machine x={25} y={11} cable/><path className="scene-seat" d="M66 76h32v7H66Z"/><Athlete x={81} y={46} pose="stand"/><Barbell x={81} y={42} width={44}/></>;
+    case 'horizontal_pull': return <><Machine x={24} y={25} cable/><path className="scene-cable" d="M38 65h35"/><path className="scene-seat" d="M73 78h34v7H73Z"/><Athlete x={92} y={50} rotate={7} pose="stand"/></>;
+    case 'vertical_press': return <><Athlete x={80} y={36} pose="stand"/><Dumbbell x={49} y={13} rotate={90}/><Dumbbell x={111} y={13} rotate={90}/></>;
+    case 'squat': return <><Barbell x={80} y={25} width={106}/><Athlete x={80} y={39} pose="squat"/></>;
+    case 'hinge': return <><Barbell x={80} y={76} width={91}/><Athlete x={80} y={37} rotate={8} pose="hinge"/></>;
+    case 'curl': return <><Athlete x={80} y={37} pose="curl"/><Dumbbell x={57} y={52} rotate={-60}/><Dumbbell x={105} y={52} rotate={60}/></>;
+    case 'extension': return <><Machine x={27} y={13} cable/><Athlete x={92} y={38} pose="stand"/><path className="scene-cable" d="M38 60 67 58"/><Dumbbell x={65} y={58}/></>;
+    case 'raise': return <><Athlete x={80} y={37} pose="stand"/><Dumbbell x={48} y={33} rotate={-27}/><Dumbbell x={112} y={33} rotate={27}/></>;
+    case 'knee_flexion': return <><Machine x={29} y={25}/><path className="scene-seat" d="M61 71h47v8H61Z"/><Athlete x={86} y={53} rotate={-85} pose="stand"/><path className="scene-machine" d="M114 72v17h16"/></>;
+    case 'calf_raise': return <><Machine x={33} y={18}/><Athlete x={89} y={37} pose="stand"/><path className="scene-platform" d="M64 82h53v7H64Z"/></>;
+    case 'anti_extension': return <><path className="scene-mat" d="M25 80h108v11H25Z"/><Athlete x={75} y={41} rotate={-6} pose="plank"/></>;
+    default: return <><path className="scene-orbit" d="M44 54c7-30 62-31 72 0-9 31-65 31-72 0Z"/><Athlete x={80} y={36} pose="stand"/></>;
+  }
 }
 
 export default function ExerciseVisual({ name = 'Movement', muscle, exercise, compact = false }) {
@@ -61,8 +100,8 @@ export default function ExerciseVisual({ name = 'Movement', muscle, exercise, co
   const asset = artworkFor(identity);
   const [failed, setFailed] = useState(false);
   const visualLabel = identity.primary_muscles?.[0] || muscle || 'Training movement';
-  return <div className={`exercise-visual ${asset && !failed ? 'has-stitch-art' : 'has-movement-glyph'} ${compact ? 'is-compact' : ''}`} aria-label={visualLabel}>
-    {asset && !failed ? <img src={asset.src} alt={asset.alt} loading="lazy" onError={() => setFailed(true)} /> : <MovementGlyph pattern={identity.visual_key} />}
+  return <div className={`exercise-visual ${asset && !failed ? 'has-stitch-art' : 'has-exercise-scene'} ${compact ? 'is-compact' : ''}`} aria-label={visualLabel}>
+    {asset && !failed ? <img src={asset.src} alt={asset.alt} loading="lazy" onError={() => setFailed(true)} /> : <MovementScene pattern={identity.visual_key} />}
     <span className="exercise-visual-badge">{visualLabel}</span>
   </div>;
 }

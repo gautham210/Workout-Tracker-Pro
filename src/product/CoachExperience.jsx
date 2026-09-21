@@ -6,8 +6,12 @@ import { authenticatedApiPost } from '../lib/api';
 import { getExerciseCatalog } from './trainingData';
 import PromptBar from './react-bits/PromptBar';
 
-const greeting = { role: 'assistant', content: 'I’m here for training, recovery, form, and progression. What would help today?' };
-const starters = ['Build a workout from my recent training', 'How should I progress my main lifts?', 'Help me plan recovery after my last session'];
+const greeting = { role: 'assistant', content: 'Tell me what you want to achieve. I’ll use your private training, nutrition, and body-metrics context to prepare a reviewable session—not a guess.' };
+const starters = [
+  'I have 45 minutes for chest and triceps. My shoulder feels a little tired.',
+  'Build a workout from my recent training and available equipment.',
+  'How should I progress my main lifts after my last session?',
+];
 
 const normalise = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -76,12 +80,12 @@ export default function CoachExperience() {
 
   const splitName = Array.isArray(profile?.custom_split) && profile.custom_split.length ? 'Your custom split' : 'Your training context';
   return <main className="experience coach-experience">
-    <section className="coach-hero"><div className="coach-mark"><Sparkles size={21} /></div><div><p className="eyebrow">Training intelligence</p><h1>Coach, in your<br />corner.</h1><span>{splitName} is available to the coach.</span></div></section>
+    <section className="coach-hero"><div className="coach-mark"><Sparkles size={21} /></div><div><p className="eyebrow">Athlete intelligence</p><h1>Build the session<br />you need.</h1><span>{splitName}, completed training, body metrics, and nutrition are available as authenticated context.</span></div></section>
     <div className="coach-context-rail"><Link to="/nutrition"><span className="coach-context-icon"><ScanLine size={17} /></span><span><strong>Scan a meal</strong><small>Bring nutrition into the conversation.</small></span><Apple size={16} /></Link></div>
     <section className="coach-thread" aria-live="polite">{messages.map((message, index) => <CoachMessage key={`${message.role}-${index}`} message={message} onApply={applyWorkout} applying={applying} />)}{loading && <div className="coach-message assistant is-thinking"><Bot size={16} /><i /><i /><i /></div>}<div ref={end} /></section>
     {error && <div className="inline-state is-error">{error}</div>}
     {messages.length === 1 && <div className="coach-starters">{starters.map((starter) => <button type="button" key={starter} onClick={() => ask(starter)} disabled={loading}>{starter}</button>)}</div>}
-    <PromptBar className="coach-prompt" width="100%" placeholder="Ask about today’s training" sources={[]} commands={[]} models={[{ key: 'coach', name: 'Training Coach', tag: 'secure' }]} defaultModel="coach" efforts={['Guided']} defaultEffort="Guided" busy={loading} background="rgba(13, 38, 72, .92)" color="#f8fbff" menuBackground="#173f73" sparkColor="#76c7ff" onSend={(message) => ask(message)} onStop={() => request.current?.abort()} onDictate={() => dictate(setError)} />
+    <PromptBar className="coach-prompt" width="100%" placeholder="Tell Coach what you want to achieve…" sources={[]} commands={[]} models={[{ key: 'coach', name: 'Training Coach', tag: 'secure' }]} defaultModel="coach" efforts={['Guided']} defaultEffort="Guided" busy={loading} background="rgba(13, 38, 72, .92)" color="#f8fbff" menuBackground="#173f73" sparkColor="#76c7ff" onSend={(message) => ask(message)} onStop={() => request.current?.abort()} onDictate={() => dictate(setError)} />
   </main>;
 }
 
@@ -102,5 +106,5 @@ function dictate(setError) {
 
 function CoachMessage({ message, onApply, applying }) {
   const proposal = message.role === 'assistant' ? message.workoutPlan : null;
-  return <article className={`coach-message ${message.role === 'user' ? 'user' : 'assistant'}`}><div className="message-persona">{message.role === 'user' ? 'You' : <><Bot size={13} /> Coach</>}</div><p>{message.content}</p>{proposal && <div className="coach-workout-proposal"><strong>{proposal.title}</strong><span>{proposal.exercises.length} movements · review before starting</span><button type="button" disabled={applying} onClick={() => onApply(proposal)}><ClipboardPlus size={16} />{applying ? 'Preparing workout…' : 'Review this workout'}</button></div>}</article>;
+  return <article className={`coach-message ${message.role === 'user' ? 'user' : 'assistant'}`}><div className="message-persona">{message.role === 'user' ? 'You' : <><Bot size={13} /> Coach</>}</div><p>{message.content}</p>{proposal && <section className="coach-workout-proposal" aria-label={`${proposal.title} workout proposal`}><p className="eyebrow">Today’s workout</p><strong>{proposal.title}</strong><div className="coach-plan-metadata"><span>{proposal.estimatedMinutes ? `${proposal.estimatedMinutes} min` : 'Session length adapts'}</span><span>{proposal.target || 'Training focus'}</span><span>{proposal.intensity || 'Guided intensity'}</span></div><ol>{proposal.exercises.map((exercise, index) => <li key={`${exercise.name}-${index}`}><span>{exercise.name}</span><small>{exercise.sets} × {exercise.repsMin}{exercise.repsMax !== exercise.repsMin ? `–${exercise.repsMax}` : ''}{exercise.rir !== null ? ` · ${exercise.rir} RIR` : ''}</small></li>)}</ol><button type="button" disabled={applying} onClick={() => onApply(proposal)}><ClipboardPlus size={16} />{applying ? 'Preparing workout…' : 'Review in workout builder'}</button></section>}</article>;
 }

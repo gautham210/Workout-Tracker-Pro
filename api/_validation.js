@@ -34,7 +34,19 @@ export function validateCoachResponse(value) {
       if (!Number.isInteger(sets) || sets < 1 || sets > 10 || !Number.isInteger(repsMin) || repsMin < 1 || repsMin > 100 || !Number.isInteger(repsMax) || repsMax < repsMin || repsMax > 100 || (rir !== null && (!Number.isFinite(rir) || rir < 0 || rir > 6)) || !Number.isInteger(restSeconds) || restSeconds < 15 || restSeconds > 600) return [];
       return [{ name: exercise.name.trim().slice(0, 160), sets, repsMin, repsMax, rir, restSeconds, notes: typeof exercise.notes === 'string' ? exercise.notes.trim().slice(0, 280) : null }];
     }) : [];
-    if (exercises.length) workoutPlan = { title, exercises, notes: typeof value.workoutPlan.notes === 'string' ? value.workoutPlan.notes.trim().slice(0, 500) : null };
+    if (exercises.length) {
+      const estimatedMinutes = Number(value.workoutPlan.estimatedMinutes);
+      const intensity = ['Easy', 'Moderate', 'Hard'].includes(value.workoutPlan.intensity) ? value.workoutPlan.intensity : null;
+      const target = typeof value.workoutPlan.target === 'string' ? value.workoutPlan.target.trim().slice(0, 100) : null;
+      workoutPlan = {
+        title,
+        exercises,
+        notes: typeof value.workoutPlan.notes === 'string' ? value.workoutPlan.notes.trim().slice(0, 500) : null,
+        estimatedMinutes: Number.isInteger(estimatedMinutes) && estimatedMinutes >= 10 && estimatedMinutes <= 240 ? estimatedMinutes : null,
+        intensity,
+        target,
+      };
+    }
   }
   return { text, intent, workoutPlan };
 }
@@ -78,7 +90,18 @@ export function validateFoodAnalysis(value) {
   if (!detectedFoods.length || !confidence || !caloriesRange || !proteinRange || !carbsRange || !fatRange) return null;
   const assumptions = Array.isArray(value.assumptions) ? value.assumptions.filter((item) => typeof item === 'string' && item.trim()).slice(0, 8).map((item) => item.trim().slice(0, 240)) : [];
   const followUpQuestion = typeof value.followUpQuestion === 'string' && value.followUpQuestion.trim() ? value.followUpQuestion.trim().slice(0, 300) : null;
-  return { detectedFoods, caloriesRange, proteinRange, carbsRange, fatRange, confidence, assumptions, followUpQuestion };
+  const items = Array.isArray(value.items) ? value.items.slice(0, 12).flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 120) : '';
+    const estimatedPortion = typeof item.estimatedPortion === 'string' ? item.estimatedPortion.trim().slice(0, 120) : '';
+    const itemCalories = range(item.caloriesRange);
+    const itemProtein = range(item.proteinRange);
+    const itemCarbs = range(item.carbsRange);
+    const itemFat = range(item.fatRange);
+    if (!name || !estimatedPortion || !itemCalories || !itemProtein || !itemCarbs || !itemFat) return [];
+    return [{ name, estimatedPortion, caloriesRange: itemCalories, proteinRange: itemProtein, carbsRange: itemCarbs, fatRange: itemFat }];
+  }) : [];
+  return { detectedFoods, items, caloriesRange, proteinRange, carbsRange, fatRange, confidence, assumptions, followUpQuestion };
 }
 
 export function validateImageDataUri(value) {

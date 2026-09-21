@@ -297,3 +297,44 @@ main .coach-prompt.prompt-bar,main .nutritionist-prompt.prompt-bar { position:fi
 @media (max-width:390px) { .nutrition-summary { grid-template-columns:1.35fr repeat(3,minmax(0,1fr)); gap:5px; }.nutrition-summary>div { padding:9px; }.nutrition-summary>div:first-child strong { font-size:20px; }.nutrition-macro>span { width:36px; height:36px; }.nutrition-macro>span:before { width:27px; height:27px; }.metrics-input-grid,.metrics-select-grid { grid-template-columns:1fr 1fr; } }
 @media (min-width:760px) { .body-metrics-form,.meal-editor { padding:23px; }.metrics-input-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }.metrics-select-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }.nutrition-summary { max-width:620px; }.exercise-detail-sheet { border-radius:28px; margin:auto auto 30px; } }
 .home-context-snapshot>div:last-child { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.home-context-snapshot a:not(.section-link) { display:block; padding:13px; border-radius:17px; color:#315d7e; background:rgba(255,255,255,.49); box-shadow:inset 0 1px rgba(255,255,255,.94); text-decoration:none; }.home-context-snapshot a span,.home-context-snapshot a strong,.home-context-snapshot a small { display:block; }.home-context-snapshot a span { color:#6d88a0; font-size:9px; font-weight:800; text-transform:uppercase; }.home-context-snapshot a strong { margin:4px 0; color:#195a88; font-size:18px; letter-spacing:-.05em; }.home-context-snapshot a small { color:#73879a; font-size:9px; line-height:1.3; }
+
+/* Product-space repair: fixed composition controls live above—not inside—the
+   floating dock.  Screen padding reserves their exact footprint so a message,
+   error, or final list row is never hidden or intercepted on phone screens. */
+.product-main { padding-bottom: calc(var(--dock-clearance) + 20px); }
+.coach-experience,.nutritionist-experience { min-height:calc(100dvh - 68px); padding-bottom:calc(var(--dock-clearance) + 156px); }
+.coach-thread,.nutritionist-thread { min-height:0; padding-bottom:8px; scroll-margin-bottom:calc(var(--dock-clearance) + 150px); }
+.coach-prompt,.nutritionist-prompt,main .coach-prompt.prompt-bar,main .nutritionist-prompt.prompt-bar { bottom:calc(var(--dock-clearance) + 8px) !important; }
+.coach-prompt .prompt-bar__field,.nutritionist-prompt .prompt-bar__field { min-height:68px; box-sizing:border-box; }
+.coach-prompt .prompt-bar__input,.nutritionist-prompt .prompt-bar__input { max-height:66px; }
+.coach-workout-proposal { overflow:hidden; }
+.coach-workout-proposal>.eyebrow { color:#4b83ac; }.coach-plan-metadata { display:flex; flex-wrap:wrap; gap:5px; margin:4px 0 2px; }.coach-plan-metadata span { padding:4px 6px; border-radius:7px; color:#2f638e; background:rgba(255,255,255,.58); font-size:9px; font-weight:800; }.coach-workout-proposal ol { display:grid; gap:5px; margin:5px 0 2px; padding:0; list-style:none; }.coach-workout-proposal li { display:flex; min-width:0; align-items:baseline; gap:8px; padding:6px 0; border-bottom:1px solid rgba(91,152,202,.15); }.coach-workout-proposal li:last-child { border-bottom:0; }.coach-workout-proposal li span { flex:1; min-width:0; overflow:hidden; color:#174b7c; font-size:11px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }.coach-workout-proposal li small { flex:0 0 auto; color:#5f7e99; font-size:9px; white-space:nowrap; }
+
+/* Keep the React Bits rolling counter from creating an unbounded paint layer
+   inside the volume card, then constrain SVG drawing to its chart surface. */
+.progress-total .counter-container,.insight-metric .counter-container { overflow:hidden; max-width:100%; vertical-align:baseline; }
+.progress-total .counter-counter,.insight-metric .counter-counter { min-width:0; max-width:100%; }
+.progress-total .gradient-container,.insight-metric .gradient-container { overflow:hidden; border-radius:inherit; }
+.volume-chart svg { clip-path:inset(0); pointer-events:none; }
+.progress-chart-section,.progress-prs { position:relative; isolation:isolate; }
+
+/* Local movement scenes are a deterministic part of the exercise identity.
+   They deliberately show distinct equipment/posture rather than letter tiles. */
+.exercise-visual.has-exercise-scene { display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 25% 18%,rgba(255,255,255,.96),transparent 33%),radial-gradient(circle at 80% 80%,rgba(83,184,255,.22),transparent 36%),linear-gradient(145deg,#e7f2ff,#ebfaf5 52%,#eef0ff); }
+.exercise-movement-scene { width:96%; height:92%; overflow:visible; filter:drop-shadow(0 8px 9px rgba(31,90,135,.12)); }
+.scene-floor,.scene-mat { fill:rgba(36,100,151,.18); }.scene-skin { fill:url(#scene-skin); }.scene-kit { fill:url(#scene-kit); }.scene-bench,.scene-seat,.scene-platform { fill:#406e96; }.scene-bench { stroke:#183c5d; stroke-width:2; }.scene-machine,.scene-bar,.scene-cable { fill:none; stroke:url(#scene-metal); stroke-width:5; stroke-linecap:round; stroke-linejoin:round; }.scene-cable { stroke-width:2.2; stroke:#4a8fc0; }.scene-pulley { fill:#e9f9ff; stroke:#337eae; stroke-width:2; }.scene-weight { fill:#17466e; }.scene-orbit { fill:none; stroke:#6fbef2; stroke-width:3; stroke-dasharray:5 5; }
+.exercise-visual.has-exercise-scene .exercise-visual-badge { position:absolute; z-index:2; right:7px; bottom:6px; max-width:calc(100% - 14px); padding:3px 5px; overflow:hidden; border-radius:7px; color:#1b5279; background:rgba(255,255,255,.64); box-shadow:inset 0 1px rgba(255,255,255,.92); font-size:8px; font-weight:850; line-height:1; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; backdrop-filter:blur(7px); }
+.exercise-visual.is-compact .exercise-movement-scene { width:108%; height:108%; }
+.food-item-breakdown { display:grid; gap:7px; margin:13px 0; }.food-item-breakdown article { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid rgba(105,177,152,.18); border-radius:13px; background:rgba(245,255,250,.62); }.food-item-breakdown article>div { flex:1; min-width:0; }.food-item-breakdown strong,.food-item-breakdown small { display:block; }.food-item-breakdown strong { overflow:hidden; color:#245e52; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }.food-item-breakdown small { margin-top:2px; color:#728d83; font-size:9px; }.food-item-breakdown span { flex:0 0 auto; color:#277767; font-size:10px; font-weight:850; }
+
+/* The entry experience is intentionally a viewport-bounded composition.  Keep the
+   card and its intrinsic form controls inside the safe mobile gutter even when a
+   browser applies a non-default minimum intrinsic width to a form control. */
+.entry-experience { width:100%; max-width:680px; padding-inline:22px; }
+.entry-card { width:100%; max-width:100%; min-width:0; margin-inline:0; box-sizing:border-box; }
+.entry-card form,.entry-card label { min-width:0; }
+.entry-card .primary-action,.entry-card input,.entry-toggle { max-width:100%; }
+@media (max-width:420px) {
+  .entry-experience { width:100vw; max-width:100vw; overflow-x:clip; }
+  .entry-card { width:calc(100vw - 44px); max-width:calc(100vw - 44px); }
+}

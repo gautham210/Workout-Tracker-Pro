@@ -7,6 +7,7 @@ const rateLimitMigration = readFileSync(new URL('../supabase/migrations/20260921
 const uuidFixMigration = readFileSync(new URL('../supabase/migrations/20260921020000_fix_sync_graph_uuid_children.sql', import.meta.url), 'utf8');
 const accountCleanupMigration = readFileSync(new URL('../supabase/migrations/20260921030000_cascade_auth_account_cleanup.sql', import.meta.url), 'utf8');
 const athleteMigration = readFileSync(new URL('../supabase/migrations/20260921040000_athlete_context_nutrition_and_exercise_metadata.sql', import.meta.url), 'utf8');
+const athletePermissionsMigration = readFileSync(new URL('../supabase/migrations/20260921050000_repair_athlete_context_permissions.sql', import.meta.url), 'utf8');
 
 test('canonical migration owns every user data path and uses server identity', () => {
   for (const table of ['profiles', 'workout_sessions', 'session_exercises', 'sets', 'bodyweight_logs']) {
@@ -53,4 +54,14 @@ test('athlete, nutrition, and metrics records remain user-scoped and use a contr
   assert.match(athleteMigration, /create or replace function public\.save_athlete_metrics\(p_payload jsonb\)/);
   assert.match(athleteMigration, /v_user uuid := auth\.uid\(\)/);
   assert.match(athleteMigration, /revoke all on function public\.save_athlete_metrics\(jsonb\) from public, anon/);
+});
+
+test('athlete context tables explicitly grant authenticated CRUD while anonymous access stays denied', () => {
+  assert.match(athletePermissionsMigration, /grant select, insert, update, delete on public\.athlete_preferences, public\.body_metrics_logs,/);
+  assert.match(athletePermissionsMigration, /public\.nutrition_targets, public\.food_entries to authenticated/);
+  assert.match(athletePermissionsMigration, /revoke all on public\.athlete_preferences, public\.body_metrics_logs, public\.nutrition_targets,/);
+  for (const table of ['athlete_preferences', 'body_metrics_logs', 'nutrition_targets', 'food_entries']) {
+    assert.match(athletePermissionsMigration, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+    assert.match(athletePermissionsMigration, new RegExp(`${table}_own_all`, 'i'));
+  }
 });
