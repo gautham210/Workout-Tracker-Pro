@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import GlassCard from '../../components/GlassCard';
-import { Plus, Play, Trash2 } from 'lucide-react-native';
+import { Check, Plus, Play, Trash2 } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function WorkoutBuilderScreen() {
@@ -19,8 +19,6 @@ export default function WorkoutBuilderScreen() {
     const { data } = await supabase.from('exercises').select('id, name, muscle_group').limit(20);
     if (data) {
       setAvailableExercises(data);
-      // pre-select first 2 for convenience if available
-      setSelectedExercises(data.slice(0, 2));
     }
     setLoading(false);
   };
@@ -44,10 +42,12 @@ export default function WorkoutBuilderScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.headerTitle}>Workout Builder</Text>
+        <Text style={styles.overline}>CREATE A SESSION</Text>
+        <Text style={styles.headerTitle}>Train with{`\n`}a clear focus.</Text>
+        <Text style={styles.headerCopy}>Choose movements from your real exercise library, then work through one set at a time.</Text>
         
         <ScrollView style={styles.list}>
-          {selectedExercises.map((ex, index) => (
+          {selectedExercises.length === 0 ? <View style={styles.emptyBuilder}><Text style={styles.emptyTitle}>Start with a movement.</Text><Text style={styles.emptyCopy}>Your finished sets will be saved locally first and synced through your workout graph.</Text></View> : selectedExercises.map((ex, index) => (
             <GlassCard key={ex.id + index.toString()} style={styles.exerciseCard}>
               <View style={styles.exerciseHeader}>
                 <View>
@@ -61,17 +61,17 @@ export default function WorkoutBuilderScreen() {
             </GlassCard>
           ))}
 
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => {
-              // Just a simple rotation of available exercises for demo
-              const nextEx = availableExercises[selectedExercises.length % availableExercises.length];
-              if (nextEx) setSelectedExercises(prev => [...prev, nextEx]);
-            }}
-          >
-            <Plus color="#0ea5e9" size={24} />
-            <Text style={styles.addText}>Add Exercise</Text>
-          </TouchableOpacity>
+          <View style={styles.librarySection}>
+            <Text style={styles.libraryLabel}>EXERCISE LIBRARY</Text>
+            {availableExercises.map((ex) => {
+              const selected = selectedExercises.some((item) => item.id === ex.id);
+              return <TouchableOpacity key={ex.id} style={[styles.libraryItem, selected && styles.libraryItemSelected]} disabled={selected} onPress={() => setSelectedExercises((current) => [...current, ex])}>
+                <View style={styles.exerciseGlyph}><Text>{(ex.name || 'M').slice(0, 1).toUpperCase()}</Text></View>
+                <View style={{ flex: 1 }}><Text style={styles.libraryName}>{ex.name}</Text><Text style={styles.libraryMuscle}>{ex.muscle_group || 'Movement'}</Text></View>
+                {selected ? <Check color="#129357" size={19} /> : <Plus color="#007aff" size={20} />}
+              </TouchableOpacity>;
+            })}
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
@@ -91,23 +91,25 @@ export default function WorkoutBuilderScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
-  container: {
-    flex: 1,
-    padding: 16,
-  },
+  container: { flex: 1, padding: 16 },
+  overline: { color: '#7b8799', fontSize: 10, fontWeight: '800', letterSpacing: 1.1, marginTop: 20 },
   headerTitle: {
     color: '#172033',
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 20,
-    marginTop: 20,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -1.3,
+    lineHeight: 34,
+    marginTop: 7,
+  },
+  headerCopy: {
+    color: '#68758a', fontSize: 13, lineHeight: 19, maxWidth: 300, marginTop: 12, marginBottom: 20,
   },
   list: {
     flex: 1,
   },
   exerciseCard: {
-    marginBottom: 12,
-    padding: 16,
+    marginBottom: 9,
+    padding: 13,
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -116,31 +118,24 @@ const styles = StyleSheet.create({
   },
   exerciseName: {
     color: '#172033',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
   muscleGroup: {
     color: '#748198',
     fontSize: 14,
     marginTop: 4,
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.32)',
-    borderRadius: 16,
-    borderStyle: 'dashed',
-    marginTop: 8,
-  },
-  addText: {
-    color: '#007aff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
+  emptyBuilder: { alignItems: 'center', padding: 28, marginBottom: 17, borderWidth: 1, borderRadius: 23, borderColor: '#c9d6e6', borderStyle: 'dashed' },
+  emptyTitle: { color: '#172033', fontSize: 21, fontWeight: '800', letterSpacing: -0.6 },
+  emptyCopy: { color: '#68758a', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 7, maxWidth: 260 },
+  librarySection: { marginTop: 13, paddingBottom: 22 },
+  libraryLabel: { color: '#78869a', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 9 },
+  libraryItem: { minHeight: 67, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e7edf4', flexDirection: 'row', alignItems: 'center', gap: 11 },
+  libraryItemSelected: { opacity: 0.62 },
+  exerciseGlyph: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#e9f4ff', alignItems: 'center', justifyContent: 'center' },
+  libraryName: { color: '#172033', fontSize: 14, fontWeight: '700' },
+  libraryMuscle: { color: '#718096', fontSize: 11, marginTop: 3 },
   footer: {
     paddingVertical: 16,
   },

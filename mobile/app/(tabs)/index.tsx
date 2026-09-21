@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import GlassCard from '../../components/GlassCard';
-import { Activity, Flame, ChevronRight, Zap, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react-native';
+import { Activity, Flame, ChevronRight, Zap, Cloud, CloudOff, RefreshCw, CheckCircle2, Dumbbell } from 'lucide-react-native';
 import { useAuth } from '../../lib/AuthContext';
 import { generateInsights, Insight } from '../../lib/insights';
 import { getDb } from '../../lib/db';
@@ -73,43 +73,32 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView 
+      <ScrollView
         style={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} tintColor="#0ea5e9" />}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} tintColor="#007aff" />}
       >
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Ready to train,</Text>
-            <Text style={styles.name}>{user?.email?.split('@')[0] || 'Athlete'}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.78)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(28,48,82,0.08)' }}
-              onPress={() => {
-                if (syncStatus.includes('failed')) {
-                  if (user) import('../../lib/sync').then(({ processOutbox }) => processOutbox(user.id, true));
-                }
-              }}
-              disabled={!syncStatus.includes('failed')}
-            >
-              {syncStatus === 'Synced' ? (
-                <CheckCircle2 color="#10b981" size={16} />
-              ) : syncStatus === 'Syncing' ? (
-                <RefreshCw color="#0ea5e9" size={16} />
-              ) : syncStatus === 'Saved locally' ? (
-                <Cloud color="#f59e0b" size={16} />
-              ) : (
-                <CloudOff color="#ef4444" size={16} />
-              )}
-              <Text style={{ color: '#24324a', fontSize: 12, marginLeft: 6, fontWeight: '700' }}>
-                {syncStatus.includes('failed') ? 'Sync Failed [Retry]' : syncStatus}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-              <Text style={{ fontSize: 24 }}>⚙️</Text>
-            </TouchableOpacity>
-          </View>
+          <View><Text style={styles.overline}>TODAY</Text><Text style={styles.name}>{user?.email?.split('@')[0] || 'Athlete'}</Text></View>
+          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}><Text style={{ fontSize: 20 }}>⚙</Text></TouchableOpacity>
         </View>
+
+        <View style={styles.todayStage}>
+          <Text style={styles.stageOverline}>TODAY'S TRAINING</Text>
+          <Text style={styles.stageTitle}>{nextWorkout?.focus || 'Build your next session.'}</Text>
+          <Text style={styles.stageCopy}>{nextWorkout?.reason || 'Choose movements that match how you want to train today.'}</Text>
+          <TouchableOpacity style={styles.stageAction} onPress={() => router.push('/(tabs)/workout')}><Text style={styles.stageActionText}>Start workout</Text><ChevronRight color="#0755a8" size={18} /></TouchableOpacity>
+          <View style={styles.stageOrb}><Dumbbell color="rgba(255,255,255,0.92)" size={74} /></View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.syncPill}
+          onPress={() => { if (syncStatus.includes('failed') && user) import('../../lib/sync').then(({ processOutbox }) => processOutbox(user.id, true)); }}
+          disabled={!syncStatus.includes('failed')}
+        >
+          {syncStatus === 'Synced' ? <CheckCircle2 color="#129357" size={15} /> : syncStatus === 'Syncing' ? <RefreshCw color="#007aff" size={15} /> : syncStatus === 'Saved locally' ? <Cloud color="#bd7610" size={15} /> : <CloudOff color="#c63731" size={15} />}
+          <Text style={styles.syncLabel}>{syncStatus.includes('failed') ? 'Sync failed · Retry' : syncStatus}</Text>
+        </TouchableOpacity>
 
         {/* Crash Recovery Prompt */}
         {unfinishedSessionId && (
@@ -137,53 +126,15 @@ export default function DashboardScreen() {
           </GlassCard>
         )}
 
-        {/* Next Workout */}
-        {nextWorkout && (
-          <GlassCard style={{ marginBottom: 16, padding: 20 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: '#68758a', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>UPCOMING SESSION</Text>
-              <Text style={{ color: '#10b981', fontSize: 14, fontWeight: 'bold' }}>{nextWorkout.split}</Text>
-            </View>
-            <Text style={{ color: '#172033', fontSize: 22, fontWeight: 'bold', marginTop: 8 }}>{nextWorkout.focus}</Text>
-            <Text style={{ color: '#68758a', fontSize: 14, marginTop: 4 }}>{nextWorkout.reason}</Text>
-            <TouchableOpacity 
-              style={{ marginTop: 16, backgroundColor: '#0ea5e9', padding: 12, borderRadius: 8, alignItems: 'center' }}
-              onPress={() => router.push('/(tabs)/workout')}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Plan Workout</Text>
-            </TouchableOpacity>
-          </GlassCard>
-        )}
+        <View style={styles.quickActions}><TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/coach')}><View style={styles.actionCard}><Flame color="#7a55dc" size={24} /><Text style={styles.actionText}>Ask Coach</Text></View></TouchableOpacity><TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/nutrition')}><View style={styles.actionCard}><Zap color="#dc8b20" size={24} /><Text style={styles.actionText}>Scan meal</Text></View></TouchableOpacity></View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/workout')}>
-            <GlassCard style={styles.actionCard}>
-              <Activity color="#0ea5e9" size={32} />
-              <Text style={styles.actionText}>Start Session</Text>
-            </GlassCard>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/coach')}>
-            <GlassCard style={styles.actionCard}>
-              <Flame color="#ef4444" size={32} />
-              <Text style={styles.actionText}>Ask AI Coach</Text>
-            </GlassCard>
-          </TouchableOpacity>
-        </View>
-
-        {/* AI Insights Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>AI Insights</Text>
-          <Zap color="#f59e0b" size={20} />
-        </View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Training signal</Text><Activity color="#007aff" size={19} /></View>
         
         {insights.length === 0 && !refreshing ? (
-          <GlassCard style={styles.insightCard}>
-            <Text style={{ color: '#68758a' }}>More data needed to generate insights.</Text>
-          </GlassCard>
+          <View style={styles.insightCard}><Text style={{ color: '#68758a' }}>Finish a few workouts and your patterns will appear here.</Text></View>
         ) : (
           insights.map(insight => (
-            <GlassCard key={insight.id} style={styles.insightCard}>
+            <View key={insight.id} style={styles.insightCard}>
               <View style={styles.insightHeader}>
                 <Text style={styles.insightTitle}>{insight.title}</Text>
               </View>
@@ -201,7 +152,7 @@ export default function DashboardScreen() {
                 <Text style={styles.insightLabelAction}>WHAT TO DO NEXT</Text>
                 <Text style={styles.insightTextAction}>{insight.whatToDoNext}</Text>
               </View>
-            </GlassCard>
+            </View>
           ))
         )}
         
@@ -213,21 +164,31 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f8fc' },
-  container: { flex: 1, padding: 16 },
-  header: { marginTop: 24, marginBottom: 32, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingsBtn: { width: 44, height: 44, backgroundColor: 'rgba(255,255,255,0.84)', borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(28,48,82,0.08)' },
-  greeting: { color: '#68758a', fontSize: 18 },
-  name: { color: '#172033', fontSize: 36, fontWeight: 'bold', letterSpacing: -1.2 },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 126 },
+  header: { marginTop: 12, marginBottom: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingsBtn: { width: 42, height: 42, backgroundColor: 'rgba(255,255,255,0.84)', borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(28,48,82,0.08)' },
+  overline: { color: '#7a8799', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  name: { color: '#172033', fontSize: 34, fontWeight: 'bold', letterSpacing: -1.2, marginTop: 3 },
+  todayStage: { minHeight: 242, borderRadius: 28, backgroundColor: '#007aff', overflow: 'hidden', padding: 23, marginBottom: 10, shadowColor: '#006cd5', shadowOpacity: 0.22, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
+  stageOverline: { color: 'rgba(255,255,255,0.68)', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
+  stageTitle: { color: '#fff', fontSize: 29, fontWeight: '800', letterSpacing: -1.1, lineHeight: 32, maxWidth: '65%', marginTop: 11 },
+  stageCopy: { color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 19, maxWidth: '62%', marginTop: 8 },
+  stageAction: { position: 'absolute', left: 23, bottom: 21, height: 43, paddingHorizontal: 15, gap: 7, borderRadius: 14, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center' },
+  stageActionText: { color: '#0755a8', fontSize: 13, fontWeight: '800' },
+  stageOrb: { position: 'absolute', right: -23, bottom: -20, width: 158, height: 158, borderRadius: 79, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-10deg' }] },
+  syncPill: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.72)', borderWidth: 1, borderColor: 'rgba(28,48,82,0.06)', marginBottom: 23 },
+  syncLabel: { color: '#526277', fontSize: 11, fontWeight: '800' },
   
-  quickActions: { flexDirection: 'row', gap: 16, marginBottom: 32 },
+  quickActions: { flexDirection: 'row', gap: 10, marginBottom: 30 },
   actionButton: { flex: 1 },
-  actionCard: { alignItems: 'center', padding: 24 },
-  actionText: { color: '#172033', marginTop: 12, fontSize: 16, fontWeight: '600' },
+  actionCard: { minHeight: 89, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.75)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(28,48,82,0.06)' },
+  actionText: { color: '#172033', marginTop: 8, fontSize: 13, fontWeight: '700' },
   
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { color: '#172033', fontSize: 22, fontWeight: '700', marginRight: 8 },
+  sectionTitle: { color: '#172033', fontSize: 21, fontWeight: '700', letterSpacing: -0.5, marginRight: 8 },
   
-  insightCard: { padding: 20, marginBottom: 16 },
+  insightCard: { padding: 18, marginBottom: 10, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.76)', borderWidth: 1, borderColor: 'rgba(28,48,82,0.06)' },
   insightHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   insightTitle: { color: '#172033', fontSize: 18, fontWeight: 'bold' },
   
