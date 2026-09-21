@@ -83,7 +83,7 @@ export default function CoachExperience() {
     <section className="coach-thread" aria-live="polite">{messages.map((message, index) => <CoachMessage key={`${message.role}-${index}`} message={message} onApply={applyWorkout} applying={applying} />)}{loading && <div className="coach-message assistant is-thinking"><Bot size={16} /><i /><i /><i /></div>}<div ref={end} /></section>
     {error && <div className="inline-state is-error">{error}</div>}
     {messages.length === 1 && <div className="coach-starters">{starters.map((starter) => <button type="button" key={starter} onClick={() => ask(starter)} disabled={loading}>{starter}</button>)}</div>}
-    <PromptBar className="coach-prompt" width="100%" placeholder="Tell Coach what you want to achieve…" sources={[]} commands={[]} models={[{ key: 'coach', name: 'Training Coach', tag: 'secure' }]} defaultModel="coach" efforts={['Guided']} defaultEffort="Guided" busy={loading} background="rgba(13, 38, 72, .92)" color="#f8fbff" menuBackground="#173f73" sparkColor="#76c7ff" onSend={(message) => ask(message)} onStop={() => request.current?.abort()} onDictate={() => dictate(setError)} />
+    <PromptBar className="coach-prompt" width="100%" maxRows={2} placeholder="Tell Coach what you want to achieve…" sources={[]} commands={[]} models={[{ key: 'coach', name: 'Training Coach', tag: 'secure' }]} defaultModel="coach" efforts={['Guided']} defaultEffort="Guided" busy={loading} background="rgba(13, 38, 72, .92)" color="#f8fbff" menuBackground="#173f73" sparkColor="#76c7ff" onSend={(message) => ask(message)} onStop={() => request.current?.abort()} onDictate={() => dictate(setError)} />
   </main>;
 }
 

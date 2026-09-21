@@ -76,28 +76,77 @@ export function validateWorkoutParse(value) {
 }
 
 function range(value) {
-  return typeof value === 'string' && /^\d{1,5}(?:\.\d+)?\s*-\s*\d{1,5}(?:\.\d+)?$/.test(value.trim()) ? value.trim() : null;
+  const bounded = (low, high) => {
+    const start = Number(low); const end = Number(high);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || end > 100000) return null;
+    const format = number => Number.isInteger(number) ? String(number) : String(Number(number.toFixed(1)));
+    return `${format(start)}-${format(end)}`;
+  };
+  if (typeof value === 'number') return bounded(value, value);
+  if (Array.isArray(value) && value.length === 2) return bounded(value[0], value[1]);
+  if (value && typeof value === 'object') return bounded(value.low ?? value.min ?? value.from, value.high ?? value.max ?? value.to);
+  if (typeof value !== 'string') return null;
+  const numbers = value.replace(/,/g, '').match(/\d+(?:\.\d+)?/g);
+  return numbers?.length === 2 ? bounded(numbers[0], numbers[1]) : numbers?.length === 1 ? bounded(numbers[0], numbers[0]) : null;
+}
+
+const first = (value, keys) => keys.map(key => value?.[key]).find(item => item !== undefined && item !== null);
+const textList = value => Array.isArray(value) ? value.flatMap(item => typeof item === 'string' ? [item] : item && typeof item === 'object' ? [first(item, ['name', 'food', 'food_name', 'label'])] : []) : [];
+const asStrings = value => Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+const foodRange = (value, keys, totals) => range(first(value, keys) ?? first(totals, keys));
+const confidenceLabel = (value) => {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (text === 'high' || text === 'medium' || text === 'low') return `${text[0].toUpperCase()}${text.slice(1)}`;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const normalized = numeric > 1 && numeric <= 100 ? numeric / 100 : numeric;
+  if (normalized < 0 || normalized > 1) return null;
+  return normalized >= 0.8 ? 'High' : normalized >= 0.5 ? 'Medium' : 'Low';
+};
+
+export function parseFoodProviderResponse(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const candidates = [cleaned];
+  const firstBrace = cleaned.indexOf('{'); const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(cleaned.slice(firstBrace, lastBrace + 1));
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+      const nested = [parsed.analysis, parsed.result, parsed.data, parsed.nutrition].find(value => value && typeof value === 'object' && !Array.isArray(value));
+      return nested || parsed;
+    } catch { /* Try the bounded JSON object candidate next. */ }
+  }
+  return null;
 }
 
 export function validateFoodAnalysis(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const detectedFoods = Array.isArray(value.detectedFoods) ? value.detectedFoods.filter((food) => typeof food === 'string' && food.trim()).slice(0, 12).map((food) => food.trim().slice(0, 120)) : [];
-  const confidence = ['High', 'Medium', 'Low'].includes(value.confidence) ? value.confidence : null;
-  const caloriesRange = range(value.caloriesRange);
-  const proteinRange = range(value.proteinRange);
-  const carbsRange = range(value.carbsRange);
-  const fatRange = range(value.fatRange);
+  const rawItems = first(value, ['items', 'foodItems', 'food_items', 'foods', 'ingredients', 'detected_items']);
+  const itemNames = textList(rawItems);
+  const detectedFoods = [...asStrings(first(value, ['detectedFoods', 'detected_foods', 'detectedFoodsList'])), ...itemNames]
+    .filter((food) => typeof food === 'string' && food.trim()).map((food) => food.trim().slice(0, 120)).filter((food, index, all) => all.indexOf(food) === index).slice(0, 12);
+  const totals = first(value, ['totals', 'totalNutrition', 'total_nutrition', 'nutritionTotals', 'nutrition_totals']) || {};
+  const confidence = confidenceLabel(first(value, ['confidence', 'confidence_level', 'confidenceScore', 'confidence_score']));
+  const caloriesRange = foodRange(value, ['caloriesRange', 'calories_range', 'calories', 'kcal', 'estimated_calories', 'totalCalories', 'total_calories'], totals);
+  const proteinRange = foodRange(value, ['proteinRange', 'protein_range', 'protein', 'protein_g', 'proteinGrams', 'totalProtein', 'total_protein'], totals);
+  const carbsRange = foodRange(value, ['carbsRange', 'carbs_range', 'carbs', 'carbohydrates', 'carbohydrates_g', 'carb_g', 'totalCarbs', 'total_carbs'], totals);
+  const fatRange = foodRange(value, ['fatRange', 'fat_range', 'fat', 'fats', 'fat_g', 'totalFat', 'total_fat'], totals);
   if (!detectedFoods.length || !confidence || !caloriesRange || !proteinRange || !carbsRange || !fatRange) return null;
-  const assumptions = Array.isArray(value.assumptions) ? value.assumptions.filter((item) => typeof item === 'string' && item.trim()).slice(0, 8).map((item) => item.trim().slice(0, 240)) : [];
-  const followUpQuestion = typeof value.followUpQuestion === 'string' && value.followUpQuestion.trim() ? value.followUpQuestion.trim().slice(0, 300) : null;
-  const items = Array.isArray(value.items) ? value.items.slice(0, 12).flatMap((item) => {
+  const assumptions = asStrings(first(value, ['assumptions', 'notes', 'analysisNotes', 'analysis_notes'])).filter((item) => typeof item === 'string' && item.trim()).slice(0, 8).map((item) => item.trim().slice(0, 240));
+  const followUp = first(value, ['followUpQuestion', 'follow_up_question', 'followup', 'question']);
+  const followUpQuestion = typeof followUp === 'string' && followUp.trim() ? followUp.trim().slice(0, 300) : null;
+  const items = Array.isArray(rawItems) ? rawItems.slice(0, 12).flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
-    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 120) : '';
-    const estimatedPortion = typeof item.estimatedPortion === 'string' ? item.estimatedPortion.trim().slice(0, 120) : '';
-    const itemCalories = range(item.caloriesRange);
-    const itemProtein = range(item.proteinRange);
-    const itemCarbs = range(item.carbsRange);
-    const itemFat = range(item.fatRange);
+    const nameValue = first(item, ['name', 'food', 'food_name', 'label']);
+    const portionValue = first(item, ['estimatedPortion', 'estimated_portion', 'portion', 'serving', 'quantity', 'estimated_portion_g', 'portion_g', 'grams']);
+    const name = typeof nameValue === 'string' ? nameValue.trim().slice(0, 120) : '';
+    const estimatedPortion = typeof portionValue === 'string' ? portionValue.trim().slice(0, 120) : Number.isFinite(Number(portionValue)) && Number(portionValue) > 0 ? `about ${Number(portionValue)} g` : '';
+    const itemCalories = range(first(item, ['caloriesRange', 'calories_range', 'calories', 'kcal', 'estimated_calories']));
+    const itemProtein = range(first(item, ['proteinRange', 'protein_range', 'protein', 'protein_g', 'proteinGrams']));
+    const itemCarbs = range(first(item, ['carbsRange', 'carbs_range', 'carbs', 'carbohydrates', 'carbohydrates_g', 'carb_g']));
+    const itemFat = range(first(item, ['fatRange', 'fat_range', 'fat', 'fats', 'fat_g']));
     if (!name || !estimatedPortion || !itemCalories || !itemProtein || !itemCarbs || !itemFat) return [];
     return [{ name, estimatedPortion, caloriesRange: itemCalories, proteinRange: itemProtein, carbsRange: itemCarbs, fatRange: itemFat }];
   }) : [];

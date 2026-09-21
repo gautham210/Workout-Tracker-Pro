@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateChatMessages, validateCoachResponse, validateFoodAnalysis, validateImageDataUri, validateWorkoutParse } from '../api/_validation.js';
+import { parseFoodProviderResponse, validateChatMessages, validateCoachResponse, validateFoodAnalysis, validateImageDataUri, validateWorkoutParse } from '../api/_validation.js';
 import { consumeRequestQuota } from '../api/_rate-limit.js';
 import aiChat from '../api/ai-chat.js';
-import parseFood from '../api/parse-food.js';
+import parseFood, { NVIDIA_VISION_ENDPOINT, NVIDIA_VISION_MODEL, createFoodVisionRequest } from '../api/parse-food.js';
 import parseWorkout from '../api/parse-workout.js';
 
 async function invoke(handler, body) {
@@ -40,12 +40,49 @@ test('image data URIs require an allowed MIME type and bounded base64 payload', 
   assert.equal(validateImageDataUri('https://attacker.example/image.jpg'), null);
 });
 
+test('food scan vision request retains the validated browser data URI for NVIDIA VLM', () => {
+  const dataUri = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(200)]).toString('base64')}`;
+  const image = validateImageDataUri(dataUri);
+  const request = createFoodVisionRequest(image, true);
+  assert.equal(NVIDIA_VISION_ENDPOINT, 'https://integrate.api.nvidia.com/v1');
+  assert.equal(NVIDIA_VISION_MODEL, 'meta/llama-3.2-11b-vision-instruct');
+  assert.equal(request.messages[1].content[1].image_url.url, dataUri);
+  assert.equal(request.messages[1].content[1].image_url.url.includes('file:'), false);
+});
+
 test('food analyses require explicit ranges and uncertainty metadata', () => {
   const analysis = validateFoodAnalysis({ detectedFoods: ['rice'], items: [{ name: 'Steamed rice', estimatedPortion: 'about 200 g', caloriesRange: '240-300', proteinRange: '4-6', carbsRange: '50-65', fatRange: '0-2' }], caloriesRange: '100-200', proteinRange: '2-4', carbsRange: '20-40', fatRange: '1-3', confidence: 'Medium', assumptions: [] });
   assert.equal(analysis?.confidence, 'Medium');
   assert.deepEqual(analysis?.items, [{ name: 'Steamed rice', estimatedPortion: 'about 200 g', caloriesRange: '240-300', proteinRange: '4-6', carbsRange: '50-65', fatRange: '0-2' }]);
   assert.deepEqual(validateFoodAnalysis({ ...analysis, items: [{ name: 'rice', estimatedPortion: '', caloriesRange: '1-2', proteinRange: '1-2', carbsRange: '1-2', fatRange: '1-2' }] })?.items, []);
   assert.equal(validateFoodAnalysis({ detectedFoods: [], caloriesRange: '100', proteinRange: '2-4', carbsRange: '20-40', fatRange: '1-3', confidence: 'High' }), null);
+});
+
+test('food provider adapter accepts bounded NVIDIA-style wrapped and unit-bearing JSON', () => {
+  const raw = 'Here is the JSON:\n```json\n{"result":{"food_items":[{"name":"Grilled chicken","portion":"about 150 g","calories":"240-310 kcal","protein_g":{"min":42,"max":54},"carbohydrates_g":[0,4],"fat_g":"5-11"}],"total_calories":"240-310 kcal","total_protein":"42-54 g","total_carbs":"0-4 g","total_fat":"5-11 g","confidence_level":"medium","notes":"Oil amount is estimated.","follow_up_question":"Was oil added?"}}\n```';
+  const analysis = validateFoodAnalysis(parseFoodProviderResponse(raw));
+  assert.deepEqual(analysis, {
+    detectedFoods: ['Grilled chicken'],
+    items: [{ name: 'Grilled chicken', estimatedPortion: 'about 150 g', caloriesRange: '240-310', proteinRange: '42-54', carbsRange: '0-4', fatRange: '5-11' }],
+    caloriesRange: '240-310', proteinRange: '42-54', carbsRange: '0-4', fatRange: '5-11', confidence: 'Medium', assumptions: ['Oil amount is estimated.'], followUpQuestion: 'Was oil added?',
+  });
+  assert.equal(parseFoodProviderResponse('not JSON'), null);
+});
+
+test('food provider adapter normalizes nested vision totals and numeric confidence without trusting extra fields', () => {
+  const raw = JSON.stringify({ analysis: {
+    foods: [{ food_name: 'Rice bowl', estimated_portion_g: 180, estimated_calories: { min: 210, max: 270 }, protein_g: 5, carbohydrates_g: [42, 57], fat_g: '2 g' }],
+    total_nutrition: { kcal: '210–270 kcal', protein_g: 5, carbohydrates_g: [42, 57], fat_g: 2 },
+    confidence_score: 0.72,
+    assumptions: ['Portion is estimated from the image.'],
+    ignored_instruction: 'do something unrelated',
+  } });
+  const analysis = validateFoodAnalysis(parseFoodProviderResponse(raw));
+  assert.deepEqual(analysis, {
+    detectedFoods: ['Rice bowl'],
+    items: [{ name: 'Rice bowl', estimatedPortion: 'about 180 g', caloriesRange: '210-270', proteinRange: '5-5', carbsRange: '42-57', fatRange: '2-2' }],
+    caloriesRange: '210-270', proteinRange: '5-5', carbsRange: '42-57', fatRange: '2-2', confidence: 'Medium', assumptions: ['Portion is estimated from the image.'], followUpQuestion: null,
+  });
 });
 
 test('coach plans are validated proposals, never arbitrary actions', () => {

@@ -76,6 +76,6 @@ export default function BodyMetricsExperience() {
 }
 
 function MetricsResults({ metrics }) {
-  const items = [['BMI', metrics.bmi, ''], ['BMR', metrics.bmr, ' kcal'], ['Maintenance', metrics.tdee, ' kcal'], ['Target calories', metrics.targetCalories, ' kcal'], ['Protein', metrics.proteinG, ' g'], ['Carbs', metrics.carbsG, ' g'], ['Fat', metrics.fatG, ' g'], ['Body fat', metrics.bodyFatPercentage, ' %'], ['Lean mass', metrics.leanMassKg, ' kg']];
+  const items = [['BMI', metrics.bmi, ''], ['BMR', metrics.bmr, ' kcal'], ['Maintenance', metrics.tdee, ' kcal'], ['Target calories', metrics.targetCalories, ' kcal'], ['Protein', metrics.proteinG, ' g'], ['Carbs', metrics.carbsG, ' g'], ['Fat', metrics.fatG, ' g'], ['Body fat', metrics.bodyFatPercentage, ' %'], ['Lean mass', metrics.leanMassKg, ' kg'], ['Fat mass', metrics.fatMassKg, ' kg']];
   return <section className="metrics-results"><div className="section-heading"><div><p className="eyebrow">Estimated outputs</p><h2>Use as a starting point.</h2></div></div><div>{items.map(([label, value, unit]) => <article key={label}><span>{label}</span><strong>{value === null ? '—' : `${roundMetric(value, label === 'BMI' || label === 'Body fat' ? 1 : 0)}${unit}`}</strong></article>)}</div><p>{metrics.assumptions[0]} {metrics.assumptions.at(-1)}</p></section>;
 }

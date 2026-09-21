@@ -301,10 +301,14 @@ main .coach-prompt.prompt-bar,main .nutritionist-prompt.prompt-bar { position:fi
 /* Product-space repair: fixed composition controls live above—not inside—the
    floating dock.  Screen padding reserves their exact footprint so a message,
    error, or final list row is never hidden or intercepted on phone screens. */
-.product-main { padding-bottom: calc(var(--dock-clearance) + 20px); }
-.coach-experience,.nutritionist-experience { min-height:calc(100dvh - 68px); padding-bottom:calc(var(--dock-clearance) + 156px); }
-.coach-thread,.nutritionist-thread { min-height:0; padding-bottom:8px; scroll-margin-bottom:calc(var(--dock-clearance) + 150px); }
-.coach-prompt,.nutritionist-prompt,main .coach-prompt.prompt-bar,main .nutritionist-prompt.prompt-bar { bottom:calc(var(--dock-clearance) + 8px) !important; }
+.product-main { padding-bottom: calc(var(--dock-clearance) + 24px); }
+/* A Coach/Nutritionist prompt is owned by its experience and fixed once above the dock.
+   Keep the scrollable experience clear of that exact fixed footprint rather than allowing
+   thread content to run underneath it. */
+:root { --prompt-height:118px; --prompt-gap:8px; --prompt-clearance:calc(var(--dock-clearance) + var(--prompt-gap) + var(--prompt-height)); }
+.coach-experience,.nutritionist-experience { min-height:calc(100dvh - 68px); padding-bottom:var(--prompt-clearance); }
+.coach-thread,.nutritionist-thread { min-height:0; padding-bottom:8px; scroll-margin-bottom:var(--prompt-clearance); }
+.coach-prompt,.nutritionist-prompt,main .coach-prompt.prompt-bar,main .nutritionist-prompt.prompt-bar { bottom:calc(var(--dock-clearance) + var(--prompt-gap)) !important; }
 .coach-prompt .prompt-bar__field,.nutritionist-prompt .prompt-bar__field { min-height:68px; box-sizing:border-box; }
 .coach-prompt .prompt-bar__input,.nutritionist-prompt .prompt-bar__input { max-height:66px; }
 .coach-workout-proposal { overflow:hidden; }
