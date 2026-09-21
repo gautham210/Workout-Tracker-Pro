@@ -480,7 +480,11 @@ export default function PromptBar({
         '--pb-bg': background,
         '--pb-ink': color,
         '--pb-menu': menuBackground,
-        '--pb-w': `${width}px`,
+        // React Bits ships this as a numeric pixel value. Allowing a CSS
+        // length as well keeps the upstream component responsive inside a
+        // mobile product shell (rather than forcing a 620px composer on a
+        // 390px viewport).
+        '--pb-w': typeof width === 'number' ? `${width}px` : width,
         '--pb-radius': `${radius}px`,
         '--pb-spark': sparkColor,
         '--pb-press': pressScale

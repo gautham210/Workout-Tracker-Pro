@@ -1,6 +1,6 @@
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Apple, BarChart3, Dumbbell, History, Home, Lightbulb, Settings2, Sparkles, TrendingUp, Upload, User, Weight,
+  Apple, Dumbbell, Home, Sparkles, TrendingUp, User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NetworkToast from '../components/NetworkToast';
@@ -15,26 +15,6 @@ const primary = [
   { to: '/ai-coach', label: 'Coach', icon: Sparkles },
   { to: '/profile', label: 'Profile', icon: User },
 ];
-
-const explore = [
-  { to: '/history', label: 'History', icon: History },
-  { to: '/insights', label: 'Insights', icon: Lightbulb },
-  { to: '/library', label: 'Library', icon: Dumbbell },
-  { to: '/import', label: 'Import', icon: Upload },
-  { to: '/bodyweight', label: 'Metrics', icon: Weight },
-  { to: '/community', label: 'Athlete', icon: BarChart3 },
-  { to: '/settings', label: 'Settings', icon: Settings2 },
-];
-
-function ProductExplorer() {
-  const location = useLocation();
-  return <nav className="product-explorer" aria-label="All product areas">
-    <span className="product-explorer-label">Explore</span>
-    <div>
-      {explore.map(({ to, label, icon: Icon }) => <Link key={to} to={to} className={location.pathname === to ? 'is-current' : ''}><Icon size={13} /><span>{label}</span></Link>)}
-    </div>
-  </nav>;
-}
 
 export default function AppShell() {
   const { profile, networkError } = useAuth();
@@ -61,8 +41,6 @@ export default function AppShell() {
           </NavLink>
         </GlassSurface>
       </header>
-
-      <ProductExplorer />
 
       <main className="product-main"><Outlet /></main>
 

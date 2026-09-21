@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, Clock3, Plus, Search, Sparkles, TimerReset, X } from 'lucide-react';
+import { BookOpen, Check, ChevronLeft, ChevronRight, Clock3, History, Plus, Search, Sparkles, TimerReset, Upload, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import ExerciseVisual from './ExerciseVisual';
+import DomainLinks from './DomainLinks';
 import HoldButton from './react-bits/HoldButton';
 import Stepper, { Step } from './react-bits/Stepper';
 import { getExerciseCatalog, kg } from './trainingData';
@@ -133,6 +134,11 @@ export default function WorkoutExperience() {
       {phase === 'build' ? (
         <>
           <section className="workout-builder-head"><p className="eyebrow">Create a session</p><h1>Train with<br />a clear focus.</h1><p>Pick your movements, then move through one focused set at a time.</p><Link to="/import" className="builder-import">Have a plan already? <span>Import it</span></Link></section>
+          <DomainLinks label="Train" title="Choose your path" items={[
+            { to: '/library', icon: BookOpen, title: 'Library', copy: 'Browse movements' },
+            { to: '/import', icon: Upload, title: 'Import', copy: 'Parse a plan' },
+            { to: '/history', icon: History, title: 'History', copy: 'Review sessions' },
+          ]} />
           <section className="builder-list">
             {exercises.length === 0 ? <BuilderEmpty onOpen={() => setLibraryOpen(true)} /> : exercises.map((item, index) => (
               <article className="builder-exercise" key={item.exercise.id}>
