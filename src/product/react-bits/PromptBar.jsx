@@ -1,21 +1,23 @@
 import { isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from 'motion/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  ArrowDown01Icon,
-  Attachment01Icon,
-  Calendar03Icon,
-  Cancel01Icon,
-  ChartLineData01Icon,
-  File02Icon,
-  Globe02Icon,
-  HelpCircleIcon,
-  Mail01Icon,
-  Mic01Icon,
-  PlusSignIcon,
-  SparklesIcon,
-  Tick02Icon
-} from '@hugeicons/core-free-icons';
+// Huge Icons 4.3.4's barrel contains case-mismatched exports that are hidden
+// by Windows but fail on Vercel's case-sensitive Linux filesystem. These are
+// the package's official per-icon export paths; keeping them direct retains
+// the upstream React Bits PromptBar while avoiding the broken barrel.
+import ArrowDown01Icon from '@hugeicons/core-free-icons/ArrowDown01Icon';
+import Attachment01Icon from '@hugeicons/core-free-icons/Attachment01Icon';
+import Calendar03Icon from '@hugeicons/core-free-icons/Calendar03Icon';
+import Cancel01Icon from '@hugeicons/core-free-icons/Cancel01Icon';
+import ChartLineData01Icon from '@hugeicons/core-free-icons/ChartLineData01Icon';
+import File02Icon from '@hugeicons/core-free-icons/File02Icon';
+import Globe02Icon from '@hugeicons/core-free-icons/Globe02Icon';
+import HelpCircleIcon from '@hugeicons/core-free-icons/HelpCircleIcon';
+import Mail01Icon from '@hugeicons/core-free-icons/Mail01Icon';
+import Mic01Icon from '@hugeicons/core-free-icons/Mic01Icon';
+import PlusSignIcon from '@hugeicons/core-free-icons/PlusSignIcon';
+import SparklesIcon from '@hugeicons/core-free-icons/SparklesIcon';
+import Tick02Icon from '@hugeicons/core-free-icons/Tick02Icon';
 import './PromptBar.css';
 
 const ARROW_UP = [12, 4.5, 18.5, 11, 14.25, 11, 14.25, 19.5, 9.75, 19.5, 9.75, 11, 5.5, 11];
