@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authenticatedApiPost } from '../lib/api';
 import { getExerciseCatalog } from './trainingData';
+import { matchCatalogExercise } from './coachWorkoutMatch';
 import PromptBar from './react-bits/PromptBar';
 
 const greeting = { role: 'assistant', content: 'Tell me what you want to achieve. I’ll use your private training, nutrition, and body-metrics context to prepare a reviewable session—not a guess.' };
@@ -12,8 +13,6 @@ const starters = [
   'Build a workout from my recent training and available equipment.',
   'How should I progress my main lifts after my last session?',
 ];
-
-const normalise = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export default function CoachExperience() {
   const { user, profile } = useAuth();
@@ -60,9 +59,8 @@ export default function CoachExperience() {
       const names = proposal.exercises.map((entry) => entry?.name).filter(Boolean);
       if (!names.length) throw new Error('The suggested workout did not contain usable exercises.');
       const catalog = await getExerciseCatalog();
-      const indexed = new Map(catalog.map((exercise) => [normalise(exercise.name), exercise]));
       const sessionExercises = proposal.exercises.map((entry) => {
-        const exercise = indexed.get(normalise(entry.name));
+        const exercise = matchCatalogExercise(entry.name, catalog);
         if (!exercise) return null;
         return {
           exercise,
