@@ -16,6 +16,8 @@ rate-limited and no pre-existing test-user credentials are stored in this repo.
 
 The migration enables RLS for every user-owned table and provides `sync_workout_graph` / `sync_workout_graphs`. Those functions obtain ownership exclusively from `auth.uid()` and atomically persist session, exercise, and set records.
 
+`supabase/migrations/20260921040000_athlete_context_nutrition_and_exercise_metadata.sql` is the next additive contract. It adds athlete preferences, body-metric records, nutrition targets, food entries, structured catalogue metadata, and the narrowly scoped `save_athlete_metrics` RPC. All new user-owned tables use RLS and `auth.uid()` ownership checks. **Its remote application was not verified in this workspace:** the Supabase CLI was not available on the active PATH. Apply it with the linked project before enabling meal persistence or the Body Metrics calculator in production.
+
 ## Mobile offline behavior
 
 The Expo app keeps an account-scoped SQLite workout graph. An unfinished workout remains local until completed. Completion writes the finished graph and durable outbox entry in one local transaction; the outbox later invokes `sync_workout_graph`. “Saved locally” is deliberately distinct from “Synced.” Failed entries retain retry metadata and can be retried from the dashboard.
@@ -33,6 +35,10 @@ per-endpoint one-minute quotas and survives serverless-instance boundaries. It
 fails closed when unavailable. Provider credentials and origin configuration
 still must be configured in the current Vercel production project; this repo
 does not contain Vercel credentials.
+
+### AI provider contract
+
+`/api/ai-chat` and `/api/parse-workout` use NVIDIA NIM at `https://integrate.api.nvidia.com/v1` with `NVIDIA_API_KEY` and `NVIDIA_TEXT_MODEL` when supplied (default: `meta/llama-3.1-8b-instruct`). `/api/parse-food` uses NVIDIA NIM model `meta/llama-3.2-11b-vision-instruct` when `NVIDIA_API_KEY` is set; it falls back to OpenAI `gpt-4o-mini` only when NVIDIA is absent and `OPENAI_API_KEY` is explicitly configured. Text requests have 12–15 second timeouts; vision has a 15 second timeout. AI chat receives a fixed, RLS-bound athlete fact projection from the server, never client-provided context or arbitrary database access. A returned workout plan is schema-validated and remains a user-reviewed draft until the athlete starts/completes it.
 
 ## Validation
 

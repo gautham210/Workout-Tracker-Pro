@@ -15,5 +15,5 @@ export async function authenticatedApiPost(path, payload, { signal } = {}) {
 
 export function clearUserLocalCaches(userId) {
   if (!userId) return;
-  for (const key of [`wtp_coach_chat_history_${userId}`, `wtp_coach_chat_cache_${userId}`, `wtp_workout_draft_v2_${userId}`]) localStorage.removeItem(key);
+  for (const key of [`wtp_coach_chat_history_${userId}`, `wtp_coach_chat_cache_${userId}`, `wtp_workout_draft_v2_${userId}`, `wtp_nutrition_journal_${userId}`]) localStorage.removeItem(key);
 }

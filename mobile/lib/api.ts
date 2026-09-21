@@ -12,7 +12,11 @@ export interface ChatMessage {
 export interface SuggestionResponse {
   text: string;
   intent: string;
-  suggestedWorkout?: any;
+  workoutPlan?: {
+    title: string;
+    notes?: string | null;
+    exercises: Array<{ name: string; sets: number; repsMin: number; repsMax: number; rir: number | null; restSeconds: number; notes?: string | null }>;
+  } | null;
 }
 
 export const getAuthHeaders = async () => {
@@ -37,31 +41,12 @@ export async function authenticatedPost(path: string, body: unknown) {
  */
 export async function sendChatMessage(
   messages: ChatMessage[],
-  context: any,
+  _context: unknown,
   isNutritionist: boolean = false
 ): Promise<SuggestionResponse> {
   try {
     const data = await authenticatedPost('/api/ai-chat', { messages: messages.slice(-12), isNutritionist });
-    if (typeof data.text === 'string' && typeof data.intent === 'string') {
-      
-      // Attempt to extract workout suggestions if they exist in the raw text
-      let suggestedWorkout = undefined;
-      const workoutMatch = data.text.match(/```workout-suggested\s*([\s\S]*?)\s*```/);
-      if (workoutMatch && workoutMatch[1]) {
-        try {
-          suggestedWorkout = JSON.parse(workoutMatch[1]);
-          // Clean the markdown from the text so the UI doesn't show it
-          data.text = data.text.replace(/```workout-suggested\s*([\s\S]*?)\s*```/, '').trim();
-        } catch (e) {
-          console.warn('Failed to parse suggested workout JSON', e);
-        }
-      }
-
-      return {
-        ...data,
-        suggestedWorkout
-      };
-    }
+    if (typeof data.text === 'string' && typeof data.intent === 'string') return data as SuggestionResponse;
     throw new Error('AI Coach returned an invalid response.');
   } catch (err: any) {
     console.error('[API] AI request failed:', err);

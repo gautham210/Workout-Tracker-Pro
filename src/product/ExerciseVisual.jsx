@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { exerciseIdentity } from './exerciseMetadata';
 
 // These are the actual movement photographs referenced by the supplied Stitch
 // export. The export does not contain local artwork files, so the visual system
@@ -31,23 +32,37 @@ const stitchArtwork = {
   },
 };
 
-function artworkFor(name, muscle) {
-  const label = `${name || ''} ${muscle || ''}`.toLowerCase();
+function artworkFor(exercise) {
+  // Only use supplied Stitch photography for the movement it actually depicts.
+  // All other movements use the deterministic semantic illustration below.
+  const label = String(exercise.name || '').toLowerCase();
   if (label.includes('incline dumbbell press')) return stitchArtwork.incline;
-  if (/deadlift|romanian|\brdl\b|hip thrust|good morning|hamstring/.test(label)) return stitchArtwork.deadlift;
-  if (/squat|lunge|leg press|leg extension|calf|quad|glute/.test(label)) return stitchArtwork.squat;
-  if (/overhead|shoulder|lateral raise|front raise|shrug|deltoid/.test(label)) return stitchArtwork.overhead;
-  if (/pull|row|lat |pulldown|curl|bicep|tricep|face pull|rear delt|back/.test(label)) return stitchArtwork.pull;
-  if (/bench|chest|press|push.?up|fly|dip|pec/.test(label)) return stitchArtwork.bench;
-  return stitchArtwork.bench;
+  if (/^barbell squat$|^back squat$/.test(label)) return stitchArtwork.squat;
+  if (/^deadlift$|^barbell deadlift$/.test(label)) return stitchArtwork.deadlift;
+  if (/^bench press$|^barbell bench press$/.test(label)) return stitchArtwork.bench;
+  if (/^pull.?up$|^weighted pull.?up$/.test(label)) return stitchArtwork.pull;
+  if (/^overhead press$|^standing overhead press$/.test(label)) return stitchArtwork.overhead;
+  return null;
 }
 
-export default function ExerciseVisual({ name = 'Movement', muscle, compact = false }) {
-  const asset = artworkFor(name, muscle);
+function MovementGlyph({ pattern }) {
+  const poses = {
+    horizontal_press: 'M24 48h48M42 29l12 19 14-17M32 68h50', vertical_press: 'M48 67V26m0 0-13 13m13-13 13 13M27 24h42',
+    horizontal_pull: 'M25 43h50m-11-12 11 12-11 12M35 66l13-23 13 23', vertical_pull: 'M24 26h48M48 26v38m-13-12 13 12 13-12',
+    squat: 'M48 24v22L31 64m17-18 18 18M26 27h44', hinge: 'M28 31l22 18 20-14M50 49 35 68m15-19 18 19M22 70h52',
+    curl: 'M48 26v38M31 39l17 13 17-13M26 68h44', raise: 'M48 69V40M25 30l23 10 23-10M48 40V22',
+    knee_flexion: 'M27 59h42M32 43l16 16 16-16M22 70h52', calf_raise: 'M48 25v37M32 65h32M27 70h42', anti_extension: 'M21 61h58M32 50h32M34 42l-13 19m45-19 13 19', movement: 'M48 23c8 0 14 6 14 14S56 51 48 51 34 45 34 37s6-14 14-14Zm0 30v23M28 69l20-16 20 16',
+  };
+  return <svg className="exercise-motion-glyph" viewBox="0 0 96 96" role="img" aria-label={`${String(pattern).replace(/_/g, ' ')} movement illustration`}><path d={poses[pattern] || poses.movement} /><circle cx="48" cy="15" r="5" /></svg>;
+}
+
+export default function ExerciseVisual({ name = 'Movement', muscle, exercise, compact = false }) {
+  const identity = exerciseIdentity(exercise || { name, muscle_group: muscle });
+  const asset = artworkFor(identity);
   const [failed, setFailed] = useState(false);
-  const visualLabel = muscle || 'Training movement';
-  return <div className={`exercise-visual ${!failed ? 'has-stitch-art' : 'is-artwork-unavailable'} ${compact ? 'is-compact' : ''}`} aria-label={visualLabel}>
-    {!failed ? <img src={asset.src} alt={asset.alt} loading="lazy" onError={() => setFailed(true)} /> : <span className="exercise-visual-neutral" aria-hidden="true"><i /><i /><i /></span>}
+  const visualLabel = identity.primary_muscles?.[0] || muscle || 'Training movement';
+  return <div className={`exercise-visual ${asset && !failed ? 'has-stitch-art' : 'has-movement-glyph'} ${compact ? 'is-compact' : ''}`} aria-label={visualLabel}>
+    {asset && !failed ? <img src={asset.src} alt={asset.alt} loading="lazy" onError={() => setFailed(true)} /> : <MovementGlyph pattern={identity.visual_key} />}
     <span className="exercise-visual-badge">{visualLabel}</span>
   </div>;
 }

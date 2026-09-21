@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, BrainCircuit, Flame, History, Play, ScanLine, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import ExerciseVisual from './ExerciseVisual';
 import Counter from './react-bits/Counter';
 import { computeStreak, getCompletedSessions, sessionVolume } from './trainingData';
@@ -23,6 +24,8 @@ export default function HomeExperience() {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [todayNutrition, setTodayNutrition] = useState(null);
+  const [latestWeight, setLatestWeight] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -32,6 +35,22 @@ export default function HomeExperience() {
       .catch(() => { if (alive) setError('Your training timeline could not be refreshed.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let live = true;
+    const today = new Date().toISOString().slice(0, 10);
+    Promise.all([
+      supabase.from('food_entries').select('calories,protein_g').eq('user_id', user.id).gte('logged_at', `${today}T00:00:00.000Z`).lt('logged_at', `${today}T23:59:59.999Z`).limit(40),
+      supabase.from('nutrition_targets').select('calories,protein_g').eq('user_id', user.id).maybeSingle(),
+      supabase.from('bodyweight_logs').select('weight_kg').eq('user_id', user.id).order('date', { ascending: false }).limit(1).maybeSingle(),
+    ]).then(([meals, target, weight]) => {
+      if (!live) return;
+      if (!meals.error && !target.error) setTodayNutrition({ calories: (meals.data || []).reduce((sum, item) => sum + Number(item.calories || 0), 0), protein: (meals.data || []).reduce((sum, item) => sum + Number(item.protein_g || 0), 0), target: target.data || null });
+      if (!weight.error) setLatestWeight(weight.data?.weight_kg ?? null);
+    });
+    return () => { live = false; };
   }, [user?.id]);
 
   const snapshot = useMemo(() => {
@@ -105,6 +124,7 @@ export default function HomeExperience() {
             <Link to="/insights" className="home-intelligence-card"><BrainCircuit size={21} /><p className="eyebrow">Data intelligence</p><h2>Progress is a pattern, not a guess.</h2><span>Open your verified training signals <ArrowUpRight size={15} /></span></Link>
             <Link to="/nutrition" className="home-nutrition-card"><ScanLine size={20} /><div><p className="eyebrow">Nutrition context</p><h2>Point. Scan. Understand.</h2></div><ArrowUpRight size={17} /></Link>
           </section>
+          {(todayNutrition || latestWeight) && <section className="home-section home-context-snapshot"><div className="section-heading"><div><p className="eyebrow">Today in context</p><h2>Small facts, connected.</h2></div><Link to="/bodyweight">Metrics</Link></div><div>{todayNutrition && <Link to="/nutrition"><span>Nutrition</span><strong>{Math.round(todayNutrition.calories)} kcal</strong><small>{todayNutrition.target?.calories ? `${Math.max(0, Number(todayNutrition.target.calories) - todayNutrition.calories).toFixed(0)} kcal remaining · ` : ''}{Math.round(todayNutrition.protein)}g protein</small></Link>}{latestWeight && <Link to="/bodyweight"><span>Bodyweight</span><strong>{Number(latestWeight).toFixed(1)} kg</strong><small>Latest private metric</small></Link>}</div></section>}
         </>
       )}
     </div>

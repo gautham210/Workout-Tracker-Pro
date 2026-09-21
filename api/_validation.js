@@ -14,6 +14,31 @@ export function validateChatMessages(value) {
   return { value: messages };
 }
 
+const coachIntents = new Set(['nutrition', 'workout_generation', 'exercise_help', 'recovery', 'progression', 'general_fitness', 'unrelated']);
+
+export function validateCoachResponse(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.message !== 'string') return null;
+  const text = value.message.trim().slice(0, 2800);
+  if (!text) return null;
+  const intent = coachIntents.has(value.intent) ? value.intent : 'general_fitness';
+  let workoutPlan = null;
+  if (value.workoutPlan && typeof value.workoutPlan === 'object' && !Array.isArray(value.workoutPlan)) {
+    const title = typeof value.workoutPlan.title === 'string' ? value.workoutPlan.title.trim().slice(0, 100) : 'Suggested workout';
+    const exercises = Array.isArray(value.workoutPlan.exercises) ? value.workoutPlan.exercises.slice(0, 12).flatMap((exercise) => {
+      if (!exercise || typeof exercise.name !== 'string' || !exercise.name.trim()) return [];
+      const sets = Number(exercise.sets);
+      const repsMin = Number(exercise.repsMin);
+      const repsMax = Number(exercise.repsMax);
+      const rir = exercise.rir === null || exercise.rir === undefined ? null : Number(exercise.rir);
+      const restSeconds = Number(exercise.restSeconds);
+      if (!Number.isInteger(sets) || sets < 1 || sets > 10 || !Number.isInteger(repsMin) || repsMin < 1 || repsMin > 100 || !Number.isInteger(repsMax) || repsMax < repsMin || repsMax > 100 || (rir !== null && (!Number.isFinite(rir) || rir < 0 || rir > 6)) || !Number.isInteger(restSeconds) || restSeconds < 15 || restSeconds > 600) return [];
+      return [{ name: exercise.name.trim().slice(0, 160), sets, repsMin, repsMax, rir, restSeconds, notes: typeof exercise.notes === 'string' ? exercise.notes.trim().slice(0, 280) : null }];
+    }) : [];
+    if (exercises.length) workoutPlan = { title, exercises, notes: typeof value.workoutPlan.notes === 'string' ? value.workoutPlan.notes.trim().slice(0, 500) : null };
+  }
+  return { text, intent, workoutPlan };
+}
+
 const finiteNumber = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
 export function validateWorkoutParse(value) {

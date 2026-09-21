@@ -6,6 +6,7 @@ const migration = readFileSync(new URL('../supabase/migrations/20260920000000_ca
 const rateLimitMigration = readFileSync(new URL('../supabase/migrations/20260921010000_distributed_api_rate_limits.sql', import.meta.url), 'utf8');
 const uuidFixMigration = readFileSync(new URL('../supabase/migrations/20260921020000_fix_sync_graph_uuid_children.sql', import.meta.url), 'utf8');
 const accountCleanupMigration = readFileSync(new URL('../supabase/migrations/20260921030000_cascade_auth_account_cleanup.sql', import.meta.url), 'utf8');
+const athleteMigration = readFileSync(new URL('../supabase/migrations/20260921040000_athlete_context_nutrition_and_exercise_metadata.sql', import.meta.url), 'utf8');
 
 test('canonical migration owns every user data path and uses server identity', () => {
   for (const table of ['profiles', 'workout_sessions', 'session_exercises', 'sets', 'bodyweight_logs']) {
@@ -42,4 +43,14 @@ test('Auth account deletion cascades through every user-owned root record', () =
     assert.match(accountCleanupMigration, new RegExp(`drop constraint if exists ${constraint}`));
   }
   assert.equal((accountCleanupMigration.match(/references auth\.users\(id\) on delete cascade/g) || []).length, 3);
+});
+
+test('athlete, nutrition, and metrics records remain user-scoped and use a controlled mutation', () => {
+  for (const table of ['athlete_preferences', 'body_metrics_logs', 'nutrition_targets', 'food_entries']) {
+    assert.match(athleteMigration, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+    assert.match(athleteMigration, new RegExp(`${table}_own_all`, 'i'));
+  }
+  assert.match(athleteMigration, /create or replace function public\.save_athlete_metrics\(p_payload jsonb\)/);
+  assert.match(athleteMigration, /v_user uuid := auth\.uid\(\)/);
+  assert.match(athleteMigration, /revoke all on function public\.save_athlete_metrics\(jsonb\) from public, anon/);
 });

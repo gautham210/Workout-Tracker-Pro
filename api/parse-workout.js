@@ -116,7 +116,7 @@ function isLikelyExerciseName(name) {
   if (blacklist.has(clean)) return false;
   
   // 2. Reject pure numeric or pure weight/rep structures (e.g. "10kg 10kg 15kg", "20 incline", "10 10 12")
-  const numericWeightNoiseRegex = /^[0-9\s.,kglbsx*+\/-]+$/i;
+  const numericWeightNoiseRegex = /^[0-9\s.,kglbsx*+/-]+$/i;
   if (numericWeightNoiseRegex.test(clean)) return false;
   
   // Check if it starts with a number followed only by a few noise words (e.g., "20 incline", "30 flat")
@@ -128,7 +128,7 @@ function isLikelyExerciseName(name) {
   if (/\d+\s*(?:day|workout|session|split|week)/i.test(clean)) return false;
 
   // 4. Token list analysis
-  const tokens = clean.split(/[\s_\-\/]+/).filter(Boolean);
+  const tokens = clean.split(/[\s_\-/]+/).filter(Boolean);
   if (tokens.length === 0) return false;
   
   // If it's a single word (single token), it MUST be a recognized exercise keyword or derivative.
@@ -167,7 +167,7 @@ function parseNumericList(line) {
   // Replace typical unit text with spaces
   const clean = line.replace(/(?:kg|lbs|kgs|reps|x)\b/ig, ' ').trim();
   // Split by spaces, commas, or slashes
-  const tokens = clean.split(/[\s,\/]+/).filter(Boolean);
+  const tokens = clean.split(/[\s,/]+/).filter(Boolean);
   if (tokens.length < 2) return null; // Must contain at least two entries to constitute a list
   
   const nums = [];
@@ -286,7 +286,6 @@ function fallbackRegexParser(rawText) {
 
   let currentExercise = null;
   const setPattern = /^[+-]?\s*(\d+(?:\.\d+)?)\s*(?:kg|lbs|kgs)?\s*[xX*]\s*(\d+)/i;
-  const repsOnlyPattern = /^(?:x|reps)?\s*(\d+)\b/i;
   const singleNumPattern = /^[+-]?\s*(\d+(?:\.\d+)?)\s*(kg|lbs|kgs)?$/i;
 
   for (let i = 0; i < lines.length; i++) {
@@ -433,6 +432,7 @@ export default async function handler(req, res) {
     const client = new OpenAI({
       apiKey,
       baseURL: 'https://integrate.api.nvidia.com/v1',
+      timeout: 15_000,
     });
 
     let userContent = `Parse this raw workout log:\n\n${normalizedRaw}`;
@@ -444,7 +444,7 @@ export default async function handler(req, res) {
     while (attempt <= 2) {
       try {
         const apiCallPromise = client.chat.completions.create({
-          model:       'meta/llama-3.1-8b-instruct',
+          model:       process.env.NVIDIA_TEXT_MODEL || 'meta/llama-3.1-8b-instruct',
           temperature: 0.0,
           max_tokens:  1536,
           messages: [

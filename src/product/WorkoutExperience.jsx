@@ -10,7 +10,7 @@ import Stepper, { Step } from './react-bits/Stepper';
 import { getExerciseCatalog, kg } from './trainingData';
 
 const blankSet = () => ({ id: crypto.randomUUID(), weight_kg: '', reps: '', rpe: '', rir: '', completed: false });
-const buildExercise = (exercise) => ({ exercise, sets: [blankSet(), blankSet(), blankSet()] });
+const buildExercise = (exercise) => ({ exercise, plannedRestSeconds: 90, planNotes: null, sets: [blankSet(), blankSet(), blankSet()] });
 const numberOrNull = (value) => (value === '' || value === null || value === undefined ? null : Number(value));
 
 function formatClock(seconds) {
@@ -33,23 +33,32 @@ export default function WorkoutExperience() {
   const [startedAt, setStartedAt] = useState(null);
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
-  const draftLoaded = useRef(false);
+  const draftLoadedFor = useRef(null);
 
   useEffect(() => {
-    if (!user?.id || draftLoaded.current) return;
-    draftLoaded.current = true;
+    if (!user?.id || draftLoadedFor.current === user.id) return;
+    draftLoadedFor.current = user.id;
     try {
       const raw = localStorage.getItem(`wtp_workout_draft_v2_${user.id}`);
       const draft = raw ? JSON.parse(raw) : null;
       if (draft?.userId === user.id && Array.isArray(draft.sessionExercises)) {
         const recovered = draft.sessionExercises.filter((item) => item?.exercise?.id).map((item) => ({
           exercise: item.exercise,
+          plannedRestSeconds: Number(item.plannedRestSeconds) || 90,
+          planNotes: item.planNotes || null,
           sets: Array.isArray(item.sets) && item.sets.length ? item.sets.map((set) => ({ ...blankSet(), ...set })) : [blankSet(), blankSet(), blankSet()],
         }));
         if (recovered.length) queueMicrotask(() => setExercises(recovered));
       }
     } catch { /* a malformed visual draft never blocks workout creation */ }
   }, [user?.id]);
+
+  // Browser recovery is intentionally user-scoped. The mobile app's durable
+  // SQLite/outbox implementation remains responsible for offline graph sync.
+  useEffect(() => {
+    if (!user?.id || !exercises.length || phase === 'complete') return;
+    try { localStorage.setItem(`wtp_workout_draft_v2_${user.id}`, JSON.stringify({ userId: user.id, savedAt: Date.now(), phase, activeIndex, startedAt, sessionExercises: exercises })); } catch { /* recovery cache never blocks a set edit */ }
+  }, [activeIndex, exercises, phase, startedAt, user?.id]);
 
   useEffect(() => {
     if (!libraryOpen) return undefined;
@@ -96,7 +105,7 @@ export default function WorkoutExperience() {
     setSaveError('');
     updateSet(exerciseIndex, setIndex, 'completed', !target.completed);
     if (!target.completed) {
-      const end = Date.now() + 90_000;
+      const end = Date.now() + Math.max(15, Number(exercises[exerciseIndex]?.plannedRestSeconds) || 90) * 1000;
       setNow(Date.now());
       setRestEndsAt(end);
       window.setTimeout(() => setRestEndsAt((current) => current === end ? null : current), 90_050);
@@ -142,7 +151,7 @@ export default function WorkoutExperience() {
           <section className="builder-list">
             {exercises.length === 0 ? <BuilderEmpty onOpen={() => setLibraryOpen(true)} /> : exercises.map((item, index) => (
               <article className="builder-exercise" key={item.exercise.id}>
-                <ExerciseVisual name={item.exercise.name} muscle={item.exercise.muscle_group} compact />
+                <ExerciseVisual exercise={item.exercise} compact />
                 <div><p>{item.exercise.muscle_group || 'Movement'}</p><h2>{item.exercise.name}</h2><span>{item.sets.length} planned sets</span></div>
                 <button type="button" className="icon-button" onClick={() => removeExercise(index)} aria-label={`Remove ${item.exercise.name}`}><X size={18} /></button>
               </article>
@@ -182,7 +191,7 @@ function BuilderEmpty({ onOpen }) {
 function ActiveExercise({ item, exerciseIndex, updateSet, toggleSet, addSet }) {
   const currentSet = Math.min(item.sets.findIndex((set) => !set.completed) + 1 || item.sets.length, item.sets.length);
   return <section className="active-exercise-card">
-    <div className="active-exercise-head"><ExerciseVisual name={item.exercise.name} muscle={item.exercise.muscle_group} /><div><p className="eyebrow">{item.exercise.muscle_group || 'Movement'} · target set</p><h1>{item.exercise.name}</h1><span>Set {currentSet} of {item.sets.length}</span>{item.exercise.description && <small className="exercise-instruction">{item.exercise.description}</small>}</div></div>
+    <div className="active-exercise-head"><ExerciseVisual exercise={item.exercise} /><div><p className="eyebrow">{item.exercise.muscle_group || 'Movement'} · target set</p><h1>{item.exercise.name}</h1><span>Set {currentSet} of {item.sets.length} · {item.plannedRestSeconds || 90}s rest</span>{item.planNotes && <small className="exercise-instruction">{item.planNotes}</small>}{item.exercise.form_cues?.[0] && <small className="exercise-instruction">Form cue: {item.exercise.form_cues[0]}</small>}</div></div>
     <div className="set-table"><div className="set-label-row"><span>Set</span><span>Weight</span><span>Reps</span><span>RPE</span><span>RIR</span><span>Done</span></div>{item.sets.map((set, setIndex) => <SetRow key={set.id} set={set} index={setIndex} update={(field, value) => updateSet(exerciseIndex, setIndex, field, value)} complete={() => toggleSet(exerciseIndex, setIndex)} />)}</div>
     <button className="add-set-button" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add set</button>
   </section>;
@@ -207,7 +216,7 @@ function SetRow({ set, index, update, complete }) {
 
 function ExerciseLibrary({ open, close, query, setQuery, catalog, loading, add, selectedIds }) {
   if (!open) return null;
-  return <div className="sheet-backdrop" onMouseDown={close}><section className="exercise-sheet" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><p className="eyebrow">Exercise library</p><h2>Find your movement.</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close exercise library"><X size={20} /></button></div><label className="search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" /></label><div className="exercise-results">{loading ? <LibrarySkeleton /> : catalog.length ? catalog.map((exercise) => <button className="library-item" type="button" key={exercise.id} onClick={() => add(exercise)} disabled={selectedIds.has(exercise.id)}><ExerciseVisual name={exercise.name} muscle={exercise.muscle_group} compact /><span><strong>{exercise.name}</strong><small>{exercise.muscle_group || 'Movement'}</small></span>{selectedIds.has(exercise.id) ? <Check size={18} /> : <Plus size={18} />}</button>) : <p className="quiet-state">No exercises match that search.</p>}</div></section></div>;
+  return <div className="sheet-backdrop" onMouseDown={close}><section className="exercise-sheet" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><p className="eyebrow">Exercise library</p><h2>Find your movement.</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close exercise library"><X size={20} /></button></div><label className="search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" /></label><div className="exercise-results">{loading ? <LibrarySkeleton /> : catalog.length ? catalog.map((exercise) => <button className="library-item" type="button" key={exercise.id} onClick={() => add(exercise)} disabled={selectedIds.has(exercise.id)}><ExerciseVisual exercise={exercise} compact /><span><strong>{exercise.name}</strong><small>{exercise.primary_muscles?.join(' · ') || exercise.muscle_group || 'Movement'} · {exercise.difficulty}</small></span>{selectedIds.has(exercise.id) ? <Check size={18} /> : <Plus size={18} />}</button>) : <p className="quiet-state">No exercises match that search.</p>}</div></section></div>;
 }
 function LibrarySkeleton() { return <div className="library-skeleton" aria-label="Loading exercise library"><span /><span /><span /><span /></div>; }
 

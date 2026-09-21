@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { enrichExercises } from './exerciseMetadata';
 
 export const kg = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Number(value) || 0);
 
@@ -41,9 +42,15 @@ export async function getCompletedSessions(userId, limit = 80) {
 }
 
 export async function getExerciseCatalog(query = '') {
-  let request = supabase.from('exercises').select('id,name,muscle_group,description').order('name').limit(80);
+  let request = supabase.from('exercises').select('id,name,muscle_group,description,aliases,equipment,movement_pattern,difficulty,primary_muscles,secondary_muscles,instructions,form_cues,common_mistakes,safety_notes,visual_key').order('name').limit(120);
   if (query.trim()) request = request.ilike('name', `%${query.trim()}%`);
   const { data, error } = await request;
-  if (error) throw error;
-  return data || [];
+  if (!error) return enrichExercises(data || []);
+  // The metadata migration is additive. Older linked environments can still
+  // browse the real catalogue while the deployment catches up.
+  let fallback = supabase.from('exercises').select('id,name,muscle_group,description').order('name').limit(120);
+  if (query.trim()) fallback = fallback.ilike('name', `%${query.trim()}%`);
+  const legacy = await fallback;
+  if (legacy.error) throw error;
+  return enrichExercises(legacy.data || []);
 }

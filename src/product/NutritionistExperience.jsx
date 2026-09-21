@@ -24,7 +24,7 @@ export default function NutritionistExperience() {
     const controller = new AbortController(); request.current = controller;
     const timeout = window.setTimeout(() => controller.abort(), 12_000);
     try {
-      const result = await authenticatedApiPost('/api/ai-chat', { messages: [...messages, { role: 'user', content: `Nutrition question: ${clean}` }].slice(-12) }, { signal: controller.signal });
+      const result = await authenticatedApiPost('/api/ai-chat', { messages: [...messages, { role: 'user', content: clean }].slice(-12), isNutritionist: true }, { signal: controller.signal });
       if (!result?.text) throw new Error('The nutritionist returned an unreadable response.');
       setMessages((current) => [...current, { role: 'assistant', content: result.text }]);
     } catch (cause) { setError(cause?.name === 'AbortError' ? 'The nutritionist took too long to reply. Try again.' : cause?.message || 'Nutritionist is temporarily unavailable.'); }

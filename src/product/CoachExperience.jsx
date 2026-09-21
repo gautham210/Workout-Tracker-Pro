@@ -3,24 +3,13 @@ import { Apple, Bot, ClipboardPlus, ScanLine, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authenticatedApiPost } from '../lib/api';
-import { supabase } from '../lib/supabase';
+import { getExerciseCatalog } from './trainingData';
 import PromptBar from './react-bits/PromptBar';
 
 const greeting = { role: 'assistant', content: 'I’m here for training, recovery, form, and progression. What would help today?' };
 const starters = ['Build a workout from my recent training', 'How should I progress my main lifts?', 'Help me plan recovery after my last session'];
 
-function cleanReply(content) {
-  return String(content || '').replace(/```workout-suggested[\s\S]*?```/g, '').trim();
-}
-
-function suggestedWorkout(content) {
-  const match = String(content || '').match(/```workout-suggested\s*([\s\S]*?)```/);
-  if (!match) return null;
-  try {
-    const candidate = JSON.parse(match[1].trim());
-    return Array.isArray(candidate?.exercises) ? candidate : null;
-  } catch { return null; }
-}
+const normalise = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export default function CoachExperience() {
   const { user, profile } = useAuth();
@@ -35,17 +24,12 @@ export default function CoachExperience() {
 
   useEffect(() => {
     if (!user?.id) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(`wtp_coach_chat_history_${user.id}`) || 'null');
-      queueMicrotask(() => setMessages(Array.isArray(saved) && saved.length ? saved.slice(-24) : [greeting]));
-    } catch { queueMicrotask(() => setMessages([greeting])); }
+    queueMicrotask(() => setMessages([greeting]));
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    try { localStorage.setItem(`wtp_coach_chat_history_${user.id}`, JSON.stringify(messages.slice(-24))); } catch { /* cache is non-critical */ }
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, user?.id]);
+  }, [messages]);
 
   const ask = async (value) => {
     const content = String(value || input).trim();
@@ -59,7 +43,7 @@ export default function CoachExperience() {
     try {
       const result = await authenticatedApiPost('/api/ai-chat', { messages: [...messages, outgoing].slice(-12) }, { signal: controller.signal });
       if (!result?.text || typeof result.text !== 'string') throw new Error('The coach returned an unreadable response.');
-      setMessages((previous) => [...previous, { role: 'assistant', content: result.text, intent: result.intent }]);
+      setMessages((previous) => [...previous, { role: 'assistant', content: result.text, intent: result.intent, workoutPlan: result.workoutPlan || null }]);
     } catch (requestError) {
       setError(requestError?.name === 'AbortError' ? 'The coach took too long to respond. Try again.' : requestError?.message || 'The coach is temporarily unavailable.');
     } finally { window.clearTimeout(timeout); request.current = null; setLoading(false); }
@@ -69,17 +53,22 @@ export default function CoachExperience() {
     if (!proposal || applying || !user?.id) return;
     setApplying(true); setError('');
     try {
-      const names = proposal.exercises.map((entry) => typeof entry === 'string' ? entry : entry?.name).filter(Boolean);
+      const names = proposal.exercises.map((entry) => entry?.name).filter(Boolean);
       if (!names.length) throw new Error('The suggested workout did not contain usable exercises.');
-      const { data: catalog, error: catalogError } = await supabase.from('exercises').select('id,name,muscle_group,description').in('name', names);
-      if (catalogError) throw catalogError;
-      const indexed = new Map((catalog || []).map((exercise) => [exercise.name.toLocaleLowerCase(), exercise]));
-      const sessionExercises = names.map((name) => indexed.get(name.toLocaleLowerCase())).filter(Boolean).map((exercise) => ({
-        exercise,
-        sets: Array.from({ length: 3 }, () => ({ id: crypto.randomUUID(), weight_kg: '', reps: '', rpe: '', rir: '', completed: false })),
-      }));
+      const catalog = await getExerciseCatalog();
+      const indexed = new Map(catalog.map((exercise) => [normalise(exercise.name), exercise]));
+      const sessionExercises = proposal.exercises.map((entry) => {
+        const exercise = indexed.get(normalise(entry.name));
+        if (!exercise) return null;
+        return {
+          exercise,
+          plannedRestSeconds: entry.restSeconds,
+          planNotes: entry.notes || null,
+          sets: Array.from({ length: entry.sets }, () => ({ id: crypto.randomUUID(), weight_kg: '', reps: String(entry.repsMin), rpe: '', rir: entry.rir === null ? '' : String(entry.rir), completed: false })),
+        };
+      }).filter(Boolean);
       if (!sessionExercises.length) throw new Error('None of those suggested movements are in your exercise library.');
-      localStorage.setItem(`wtp_workout_draft_v2_${user.id}`, JSON.stringify({ userId: user.id, savedAt: Date.now(), sessionExercises }));
+      localStorage.setItem(`wtp_workout_draft_v2_${user.id}`, JSON.stringify({ userId: user.id, savedAt: Date.now(), title: proposal.title, planNotes: proposal.notes || null, sessionExercises }));
       navigate('/workout');
     } catch (applyError) { setError(applyError?.message || 'The suggested workout could not be prepared.'); }
     finally { setApplying(false); }
@@ -112,6 +101,6 @@ function dictate(setError) {
 }
 
 function CoachMessage({ message, onApply, applying }) {
-  const proposal = message.role === 'assistant' ? suggestedWorkout(message.content) : null;
-  return <article className={`coach-message ${message.role === 'user' ? 'user' : 'assistant'}`}><div className="message-persona">{message.role === 'user' ? 'You' : <><Bot size={13} /> Coach</>}</div><p>{cleanReply(message.content)}</p>{proposal && <button className="coach-workout-proposal" type="button" disabled={applying} onClick={() => onApply(proposal)}><ClipboardPlus size={16} />{applying ? 'Preparing workout…' : 'Use this workout'}</button>}</article>;
+  const proposal = message.role === 'assistant' ? message.workoutPlan : null;
+  return <article className={`coach-message ${message.role === 'user' ? 'user' : 'assistant'}`}><div className="message-persona">{message.role === 'user' ? 'You' : <><Bot size={13} /> Coach</>}</div><p>{message.content}</p>{proposal && <div className="coach-workout-proposal"><strong>{proposal.title}</strong><span>{proposal.exercises.length} movements · review before starting</span><button type="button" disabled={applying} onClick={() => onApply(proposal)}><ClipboardPlus size={16} />{applying ? 'Preparing workout…' : 'Review this workout'}</button></div>}</article>;
 }

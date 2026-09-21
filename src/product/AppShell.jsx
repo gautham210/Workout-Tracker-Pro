@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import NetworkToast from '../components/NetworkToast';
 import Dock from './react-bits/Dock';
 import GlassSurface from './react-bits/GlassSurface';
+import ProductLogo from './ProductLogo';
 
 const primary = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -32,9 +33,9 @@ export default function AppShell() {
       <div className="product-ambient" aria-hidden="true" />
       <header className="product-topbar">
         <GlassSurface width="100%" height={52} borderRadius={19} backgroundOpacity={0.16} saturation={1.45} className="product-topbar-glass">
-          <NavLink to="/" className="product-wordmark" aria-label="Workout Tracker home">
-            <span className="product-mark"><Dumbbell size={18} /></span>
-            <span>WORKOUT</span>
+          <NavLink to="/" className="product-wordmark" aria-label="Workout Tracker Pro home">
+            <span className="product-mark"><ProductLogo size={31} /></span>
+            <span>WORKOUT TRACKER PRO</span>
           </NavLink>
           <NavLink className="profile-orb" to="/profile" aria-label="Open your profile">
             {profile?.name?.trim()?.slice(0, 1).toUpperCase() || <User size={18} />}

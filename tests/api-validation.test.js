@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateChatMessages, validateFoodAnalysis, validateImageDataUri, validateWorkoutParse } from '../api/_validation.js';
+import { validateChatMessages, validateCoachResponse, validateFoodAnalysis, validateImageDataUri, validateWorkoutParse } from '../api/_validation.js';
 import { consumeRequestQuota } from '../api/_rate-limit.js';
 import aiChat from '../api/ai-chat.js';
 import parseFood from '../api/parse-food.js';
@@ -43,6 +43,12 @@ test('image data URIs require an allowed MIME type and bounded base64 payload', 
 test('food analyses require explicit ranges and uncertainty metadata', () => {
   assert.equal(validateFoodAnalysis({ detectedFoods: ['rice'], caloriesRange: '100-200', proteinRange: '2-4', carbsRange: '20-40', fatRange: '1-3', confidence: 'Medium', assumptions: [] })?.confidence, 'Medium');
   assert.equal(validateFoodAnalysis({ detectedFoods: [], caloriesRange: '100', proteinRange: '2-4', carbsRange: '20-40', fatRange: '1-3', confidence: 'High' }), null);
+});
+
+test('coach plans are validated proposals, never arbitrary actions', () => {
+  const valid = validateCoachResponse({ message: 'Here is a reviewable plan.', intent: 'workout_generation', workoutPlan: { title: 'Push', exercises: [{ name: 'Bench Press', sets: 3, repsMin: 6, repsMax: 8, rir: 2, restSeconds: 120 }] } });
+  assert.equal(valid.workoutPlan.exercises[0].name, 'Bench Press');
+  assert.equal(validateCoachResponse({ message: 'Unsafe', workoutPlan: { exercises: [{ name: 'x', sets: 99, repsMin: 1, repsMax: 2, restSeconds: 90 }] } }).workoutPlan, null);
 });
 
 test('rate-limit RPC response is fail-closed and preserves retry metadata', async () => {
