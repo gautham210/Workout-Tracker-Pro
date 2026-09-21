@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Flame, Play, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ExerciseVisual from './ExerciseVisual';
-import { computeStreak, getCompletedSessions, kg, sessionVolume } from './trainingData';
+import CountUp from './bits/CountUp';
+import { computeStreak, getCompletedSessions, sessionVolume } from './trainingData';
 
 function nextFocus(profile, sessions) {
   if (!sessions.length) return { title: 'Build your first session', caption: 'Choose movements that match today.', action: 'Start building' };
@@ -69,9 +70,9 @@ export default function HomeExperience() {
           </section>
 
           <section className="glance-strip" aria-label="Training summary">
-            <div><Flame size={18} color="#ff8a00" /><strong>{snapshot.streak}</strong><span>day streak</span></div>
-            <div><Trophy size={18} color="#007aff" /><strong>{snapshot.sessions}</strong><span>sessions</span></div>
-            <div><ArrowUpRight size={18} color="#34c759" /><strong>{kg(snapshot.volume)}</strong><span>kg this week</span></div>
+            <div><Flame size={18} color="#ff8a00" /><strong><CountUp value={snapshot.streak} /></strong><span>day streak</span></div>
+            <div><Trophy size={18} color="#007aff" /><strong><CountUp value={snapshot.sessions} /></strong><span>sessions</span></div>
+            <div><ArrowUpRight size={18} color="#34c759" /><strong><CountUp value={Math.round(snapshot.volume)} /></strong><span>kg this week</span></div>
           </section>
 
           <section className="home-section">

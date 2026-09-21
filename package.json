@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",
     "lucide-react": "^1.8.0",
+    "motion": "^13.4.0",
     "openai": "^6.39.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
