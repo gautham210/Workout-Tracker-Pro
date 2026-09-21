@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Flame, Play, Sparkles, Trophy, WifiOff } from 'lucide-react';
+import { ArrowUpRight, BrainCircuit, Flame, History, Play, ScanLine, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ExerciseVisual from './ExerciseVisual';
-import CountUp from './bits/CountUp';
+import Counter from './react-bits/Counter';
 import { computeStreak, getCompletedSessions, sessionVolume } from './trainingData';
 
 function nextFocus(profile, sessions) {
@@ -70,9 +70,15 @@ export default function HomeExperience() {
           </section>
 
           <section className="glance-strip" aria-label="Training summary">
-            <div><Flame size={18} color="#ff8a00" /><strong><CountUp value={snapshot.streak} /></strong><span>day streak</span></div>
-            <div><Trophy size={18} color="#007aff" /><strong><CountUp value={snapshot.sessions} /></strong><span>sessions</span></div>
-            <div><ArrowUpRight size={18} color="#34c759" /><strong><CountUp value={Math.round(snapshot.volume)} /></strong><span>kg this week</span></div>
+            <div><Flame size={18} color="#ff8a00" /><strong><Counter value={snapshot.streak} fontSize={22} gap={0} horizontalPadding={0} gradientHeight={0} /></strong><span>day streak</span></div>
+            <div><Trophy size={18} color="#007aff" /><strong><Counter value={snapshot.sessions} fontSize={22} gap={0} horizontalPadding={0} gradientHeight={0} /></strong><span>sessions</span></div>
+            <div><ArrowUpRight size={18} color="#34c759" /><strong><Counter value={Math.round(snapshot.volume)} fontSize={22} gap={0} horizontalPadding={0} gradientHeight={0} /></strong><span>kg this week</span></div>
+          </section>
+
+          <section className="home-action-grid" aria-label="Training shortcuts">
+            <Link to="/history"><History size={17} /><span><strong>Archive</strong><small>Every completed session</small></span><ArrowUpRight size={15} /></Link>
+            <Link to="/insights"><BrainCircuit size={17} /><span><strong>Insights</strong><small>Signals from your data</small></span><ArrowUpRight size={15} /></Link>
+            <Link to="/nutrition"><ScanLine size={17} /><span><strong>Nutrition</strong><small>Scan the next meal</small></span><ArrowUpRight size={15} /></Link>
           </section>
 
           <section className="home-section">
@@ -93,6 +99,11 @@ export default function HomeExperience() {
           <section className="home-section home-coach-tease">
             <div><p className="eyebrow">Training intelligence</p><h2>Ask for a plan that uses your history.</h2><p>Coach receives your authenticated training context. No generic demo answers.</p></div>
             <Link to="/ai-coach" className="secondary-action">Talk to Coach <ArrowUpRight size={17} /></Link>
+          </section>
+
+          <section className="home-section home-intelligence-grid">
+            <Link to="/insights" className="home-intelligence-card"><BrainCircuit size={21} /><p className="eyebrow">Data intelligence</p><h2>Progress is a pattern, not a guess.</h2><span>Open your verified training signals <ArrowUpRight size={15} /></span></Link>
+            <Link to="/nutrition" className="home-nutrition-card"><ScanLine size={20} /><div><p className="eyebrow">Nutrition context</p><h2>Point. Scan. Understand.</h2></div><ArrowUpRight size={17} /></Link>
           </section>
         </>
       )}

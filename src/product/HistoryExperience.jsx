@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Dumbbell, History, RotateCcw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ExerciseVisual from './ExerciseVisual';
+import AnimatedList from './react-bits/AnimatedList';
 import { getCompletedSessions, kg, sessionVolume } from './trainingData';
 
 function labelDate(value) {
@@ -40,6 +41,7 @@ export default function HistoryExperience() {
     {state === 'loading' && <HistorySkeleton />}
     {state === 'error' && <div className="quiet-panel"><RotateCcw size={22} /><h2>Your archive is unavailable.</h2><p>Check your connection, then return to refresh the timeline.</p></div>}
     {state === 'ready' && sessions.length === 0 && <div className="quiet-panel history-empty"><Dumbbell size={28} /><h2>Your first session starts the story.</h2><p>Finish a workout and its real sets, volume, and movements will appear here.</p></div>}
+    {state === 'ready' && sessions.length > 0 && <section className="history-motion-strip"><div className="section-heading"><div><p className="eyebrow">Recent rhythm</p><h2>Tap a session to open it.</h2></div></div><AnimatedList items={sessions.slice(0, 5).map((session) => `${labelDate(session.date)} · ${session.split_day || 'Workout'} · ${kg(sessionVolume(session))} kg`)} showGradients={false} displayScrollbar={false} enableArrowNavigation={false} className="history-animated-list" itemClassName="history-animated-item" onItemSelect={(_, index) => setExpanded(sessions[index]?.id || null)} /></section>}
     {Object.entries(groups).map(([date, daily]) => <section className="history-day" key={date}><p className="history-date">{date}</p>{daily.map((session) => <SessionRow key={session.id} session={session} open={expanded === session.id} toggle={() => setExpanded((id) => id === session.id ? null : session.id)} />)}</section>)}
   </main>;
 }

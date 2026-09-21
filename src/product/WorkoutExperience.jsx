@@ -4,6 +4,8 @@ import { Check, ChevronLeft, ChevronRight, Clock3, Plus, Search, Sparkles, Timer
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import ExerciseVisual from './ExerciseVisual';
+import HoldButton from './react-bits/HoldButton';
+import Stepper, { Step } from './react-bits/Stepper';
 import { getExerciseCatalog, kg } from './trainingData';
 
 const blankSet = () => ({ id: crypto.randomUUID(), weight_kg: '', reps: '', rpe: '', rir: '', completed: false });
@@ -140,12 +142,13 @@ export default function WorkoutExperience() {
               </article>
             ))}
           </section>
+          {exercises.length > 0 && <BuildJourney exerciseCount={exercises.length} onStart={startWorkout} />}
           <button type="button" className="add-movement" onClick={() => setLibraryOpen(true)}><Plus size={18} /> Add movement</button>
           <div className="workout-dock"><span>{exercises.length ? `${exercises.length} movements ready` : 'Build your session'}</span><button type="button" className="primary-action" disabled={!exercises.length} onClick={startWorkout}><Sparkles size={17} /> Begin workout</button></div>
         </>
       ) : (
         <>
-          <section className="active-topline"><button className="icon-button" onClick={resetWorkout} type="button" aria-label="Return to workout builder"><ChevronLeft size={21} /></button><span>{completedSets} sets logged</span><button className="text-action" onClick={finishWorkout} disabled={saving} type="button">{saving ? 'Saving…' : 'Finish'}</button></section>
+          <section className="active-topline"><button className="icon-button" onClick={resetWorkout} type="button" aria-label="Return to workout builder"><ChevronLeft size={21} /></button><span>{completedSets} sets logged</span><HoldButton className="finish-hold" size="sm" holdTime={850} resetAfter={750} disabled={saving} backgroundColor="rgba(11,36,68,.82)" fillColor="#007aff" onHold={finishWorkout} doneLabel="Saving…" icon={<Check size={14} />}>Hold to finish</HoldButton></section>
           <div className="workout-progress" aria-label={`${completedSets} completed sets`}><span style={{ width: `${Math.min(100, (completedSets / Math.max(1, exercises.flatMap((item) => item.sets).length)) * 100)}%` }} /></div>
           {restEndsAt && <div className="rest-glass"><Clock3 size={16} /><span>Rest</span><strong>{formatClock(restRemaining)}</strong><button type="button" onClick={() => { const next = (restEndsAt || Date.now()) + 30_000; setNow(Date.now()); setRestEndsAt(next); }} aria-label="Add 30 seconds to rest"><TimerReset size={15} /> +30</button><button type="button" onClick={() => setRestEndsAt(null)}>Skip</button></div>}
           {active && <ActiveExercise key={active.exercise.id} item={active} exerciseIndex={activeIndex} updateSet={updateSet} toggleSet={toggleSet} addSet={addSet} />}
@@ -156,6 +159,14 @@ export default function WorkoutExperience() {
       <ExerciseLibrary open={libraryOpen} close={() => setLibraryOpen(false)} query={query} setQuery={setQuery} catalog={catalog} loading={catalogLoading} add={addExercise} selectedIds={new Set(exercises.map((item) => item.exercise.id))} />
     </div>
   );
+}
+
+function BuildJourney({ exerciseCount, onStart }) {
+  return <Stepper className="workout-build-journey" onFinalStepCompleted={onStart} nextButtonText="Review" backButtonText="Back">
+    <Step><div className="journey-copy"><p className="eyebrow">Step one</p><h2>Choose your movements.</h2><p>{exerciseCount} {exerciseCount === 1 ? 'movement is' : 'movements are'} in this session. Add or remove them before you begin.</p></div></Step>
+    <Step><div className="journey-copy"><p className="eyebrow">Step two</p><h2>Log with intention.</h2><p>Weight, reps, RPE and RIR stay editable through the active workout. Your set entries autosave visually until completion.</p></div></Step>
+    <Step><div className="journey-copy"><p className="eyebrow">Step three</p><h2>Ready when you are.</h2><p>Finish one completed set or more, then the workout graph is persisted through your authenticated sync RPC.</p></div></Step>
+  </Stepper>;
 }
 
 function BuilderEmpty({ onOpen }) {

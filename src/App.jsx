@@ -14,6 +14,9 @@ const BodyMetricsExperience = lazy(() => import('./product/BodyMetricsExperience
 const ProfileExperience = lazy(() => import('./product/ProfileExperience'));
 const ImportExperience = lazy(() => import('./product/ImportExperience'));
 const AthleteSpaceExperience = lazy(() => import('./product/AthleteSpaceExperience'));
+const LibraryExperience = lazy(() => import('./product/LibraryExperience'));
+const InsightsExperience = lazy(() => import('./product/InsightsExperience'));
+const NutritionistExperience = lazy(() => import('./product/NutritionistExperience'));
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth();
@@ -32,8 +35,11 @@ function App() {
             <Route index element={<HomeExperience />} />
             <Route path="workout" element={<WorkoutExperience />} />
           <Route path="history" element={<HistoryExperience />} />
-            <Route path="progress" element={<ProgressExperience />} />
-            <Route path="nutrition" element={<NutritionExperience />} />
+          <Route path="library" element={<LibraryExperience />} />
+          <Route path="progress" element={<ProgressExperience />} />
+          <Route path="nutrition" element={<NutritionExperience />} />
+          <Route path="nutritionist" element={<NutritionistExperience />} />
+          <Route path="insights" element={<InsightsExperience />} />
             <Route path="analytics" element={<Navigate to="/progress" replace />} />
           <Route path="bodyweight" element={<BodyMetricsExperience />} />
           <Route path="import" element={<ImportExperience />} />

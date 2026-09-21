@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Apple, ArrowUp, Bot, ClipboardPlus, LoaderCircle, ScanLine, Sparkles } from 'lucide-react';
+import { Apple, Bot, ClipboardPlus, ScanLine, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authenticatedApiPost } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import PromptBar from './react-bits/PromptBar';
 
 const greeting = { role: 'assistant', content: 'I’m here for training, recovery, form, and progression. What would help today?' };
 const starters = ['Build a workout from my recent training', 'How should I progress my main lifts?', 'Help me plan recovery after my last session'];
@@ -30,6 +31,7 @@ export default function CoachExperience() {
   const [error, setError] = useState('');
   const [applying, setApplying] = useState(false);
   const end = useRef(null);
+  const request = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -52,6 +54,7 @@ export default function CoachExperience() {
     setMessages((previous) => [...previous, outgoing]);
     setInput(''); setError(''); setLoading(true);
     const controller = new AbortController();
+    request.current = controller;
     const timeout = window.setTimeout(() => controller.abort(), 12_000);
     try {
       const result = await authenticatedApiPost('/api/ai-chat', { messages: [...messages, outgoing].slice(-12) }, { signal: controller.signal });
@@ -59,7 +62,7 @@ export default function CoachExperience() {
       setMessages((previous) => [...previous, { role: 'assistant', content: result.text, intent: result.intent }]);
     } catch (requestError) {
       setError(requestError?.name === 'AbortError' ? 'The coach took too long to respond. Try again.' : requestError?.message || 'The coach is temporarily unavailable.');
-    } finally { window.clearTimeout(timeout); setLoading(false); }
+    } finally { window.clearTimeout(timeout); request.current = null; setLoading(false); }
   };
 
   const applyWorkout = async (proposal) => {
@@ -89,8 +92,23 @@ export default function CoachExperience() {
     <section className="coach-thread" aria-live="polite">{messages.map((message, index) => <CoachMessage key={`${message.role}-${index}`} message={message} onApply={applyWorkout} applying={applying} />)}{loading && <div className="coach-message assistant is-thinking"><Bot size={16} /><i /><i /><i /></div>}<div ref={end} /></section>
     {error && <div className="inline-state is-error">{error}</div>}
     {messages.length === 1 && <div className="coach-starters">{starters.map((starter) => <button type="button" key={starter} onClick={() => ask(starter)} disabled={loading}>{starter}</button>)}</div>}
-    <form className="coach-composer" onSubmit={(event) => { event.preventDefault(); ask(); }}><input value={input} onChange={(event) => setInput(event.target.value)} maxLength={2000} placeholder="Ask about today’s training" disabled={loading} aria-label="Ask your AI coach" /><button type="submit" disabled={loading || !input.trim()} aria-label="Send to AI coach">{loading ? <LoaderCircle className="spin" size={18} /> : <ArrowUp size={18} />}</button></form>
+    <PromptBar className="coach-prompt" width={620} placeholder="Ask about today’s training" sources={[]} commands={[]} models={[{ key: 'coach', name: 'Training Coach', tag: 'secure' }]} defaultModel="coach" efforts={['Guided']} defaultEffort="Guided" busy={loading} background="rgba(13, 38, 72, .92)" color="#f8fbff" menuBackground="#173f73" sparkColor="#76c7ff" onSend={(message) => ask(message)} onStop={() => request.current?.abort()} onDictate={() => dictate(setError)} />
   </main>;
+}
+
+function dictate(setError) {
+  return new Promise((resolve) => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { setError('Voice input is not supported by this browser.'); resolve(''); return; }
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => resolve(event.results?.[0]?.[0]?.transcript || '');
+    recognition.onerror = () => { setError('Voice input could not be captured.'); resolve(''); };
+    recognition.onend = () => resolve('');
+    recognition.start();
+  });
 }
 
 function CoachMessage({ message, onApply, applying }) {
