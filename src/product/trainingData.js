@@ -41,16 +41,31 @@ export async function getCompletedSessions(userId, limit = 80) {
   return data || [];
 }
 
-export async function getExerciseCatalog(query = '') {
-  let request = supabase.from('exercises').select('id,name,muscle_group,description,aliases,equipment,movement_pattern,difficulty,primary_muscles,secondary_muscles,instructions,form_cues,common_mistakes,safety_notes,visual_key').order('name').limit(120);
-  if (query.trim()) request = request.ilike('name', `%${query.trim()}%`);
-  const { data, error } = await request;
-  if (!error) return enrichExercises(data || []);
-  // The metadata migration is additive. Older linked environments can still
-  // browse the real catalogue while the deployment catches up.
-  let fallback = supabase.from('exercises').select('id,name,muscle_group,description').order('name').limit(120);
-  if (query.trim()) fallback = fallback.ilike('name', `%${query.trim()}%`);
-  const legacy = await fallback;
-  if (legacy.error) throw error;
-  return enrichExercises(legacy.data || []);
+const CATALOG_LIMIT = 500;
+const FULL_COLUMNS = 'id,name,muscle_group,description,aliases,equipment,movement_pattern,difficulty,primary_muscles,secondary_muscles,instructions,form_cues,common_mistakes,safety_notes,visual_key';
+const LEGACY_COLUMNS = 'id,name,muscle_group,description';
+// ilike treats % _ and \ as wildcards; a search for "50%" must not match everything.
+const likePattern = (value) => `%${value.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+
+/**
+ * Loads up to 500 catalogue rows (the whole shared catalogue). `slug` is selected when the column
+ * exists; older deployments transparently fall back to fewer columns. Pass an AbortSignal to
+ * cancel a superseded search.
+ */
+export async function getExerciseCatalog(query = '', { signal, limit = CATALOG_LIMIT } = {}) {
+  const search = String(query || '').trim();
+  const run = (columns) => {
+    let request = supabase.from('exercises').select(columns).order('name').limit(limit);
+    if (search) request = request.ilike('name', likePattern(search));
+    if (signal) request = request.abortSignal(signal);
+    return request;
+  };
+  let lastError = null;
+  for (const columns of [`slug,${FULL_COLUMNS}`, FULL_COLUMNS, LEGACY_COLUMNS]) {
+    const { data, error } = await run(columns);
+    if (!error) return enrichExercises(data || []);
+    lastError = error;
+    if (signal?.aborted) break;
+  }
+  throw lastError;
 }

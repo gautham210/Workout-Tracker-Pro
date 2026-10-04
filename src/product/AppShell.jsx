@@ -1,12 +1,14 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Apple, Dumbbell, Home, Sparkles, TrendingUp, User,
+  Apple, ChevronLeft, Dumbbell, Home, Sparkles, TrendingUp, User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NetworkToast from '../components/NetworkToast';
 import Dock from './react-bits/Dock';
 import GlassSurface from './react-bits/GlassSurface';
 import ProductLogo from './ProductLogo';
+import { syncPendingWorkouts } from './workoutSync';
 
 const primary = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -17,16 +19,60 @@ const primary = [
   { to: '/profile', label: 'Profile', icon: User },
 ];
 
+// Secondary routes belong to a primary tab: the dock highlights the parent and
+// the Back affordance returns to it.
+const SECTION_PARENT = {
+  '/history': '/workout', '/library': '/workout', '/import': '/workout',
+  '/bodyweight': '/progress', '/insights': '/progress',
+  '/community': '/profile', '/settings': '/profile',
+  '/nutritionist': '/nutrition',
+};
+const PARENT_LABEL = { '/workout': 'Train', '/progress': 'Progress', '/profile': 'Profile', '/nutrition': 'Nutrition' };
+
+const sectionOf = (pathname) => {
+  const top = '/' + (pathname.split('/')[1] || '');
+  return SECTION_PARENT[top] || top;
+};
+
+function BackLink() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const parent = SECTION_PARENT['/' + (pathname.split('/')[1] || '')];
+  if (!parent) return null;
+  return (
+    <button type="button" className="product-back" onClick={() => navigate(parent)} aria-label={`Back to ${PARENT_LABEL[parent]}`}>
+      <ChevronLeft size={18} strokeWidth={2.3} aria-hidden="true" />
+      <span>{PARENT_LABEL[parent]}</span>
+    </button>
+  );
+}
+
 export default function AppShell() {
-  const { profile, networkError } = useAuth();
+  const { user, profile, networkError } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const dockItems = primary.map(({ to, label, icon: Icon, end }) => ({
-    label,
-    className: (end ? location.pathname === to : location.pathname.startsWith(to)) ? 'is-active' : '',
-    onClick: () => navigate(to),
-    icon: <span className="product-dock-icon"><Icon size={19} strokeWidth={2.15} /><small>{label}</small></span>,
-  }));
+  const section = sectionOf(location.pathname);
+  const userId = user?.id;
+
+  // Finished workouts that could not reach the server are retried on load and on reconnect.
+  useEffect(() => {
+    if (!userId) return undefined;
+    const run = () => { syncPendingWorkouts(userId).catch(() => {}); };
+    run();
+    window.addEventListener('online', run);
+    return () => window.removeEventListener('online', run);
+  }, [userId]);
+
+  const dockItems = primary.map(({ to, label, icon: Icon }) => {
+    const active = section === to;
+    return {
+      label,
+      active,
+      className: active ? 'is-active' : '',
+      onClick: () => navigate(to),
+      icon: <span className="product-dock-icon"><Icon size={19} strokeWidth={2.15} /><small>{label}</small></span>,
+    };
+  });
 
   return (
     <div className="product-app-shell">
@@ -43,7 +89,7 @@ export default function AppShell() {
         </GlassSurface>
       </header>
 
-      <main className="product-main"><Outlet /></main>
+      <main className="product-main"><BackLink /><Outlet /></main>
 
       <nav className="product-react-bits-dock" aria-label="Primary navigation">
         <Dock items={dockItems} panelHeight={68} dockHeight={68} baseItemSize={46} magnification={52} distance={96} />

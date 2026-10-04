@@ -1,98 +1,59 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://egefeiuyktelihsbbzyt.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_hd_-u_hgdVcXXjkCbRPkDA_xHf9XOfe';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
-  console.error(
-    '[NETWORK] Invalid URL detected:', supabaseUrl,
-    '\nMake sure VITE_SUPABASE_URL is set correctly in your environment.'
-  );
-}
+const isValidUrl = (value) => {
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+};
 
-// ── Cooldown & Network Resilience state ────────────────────────────────────────
-let consecutiveFailures = 0;
-let cooldownUntil = 0;
+/** Lists missing/invalid configuration so the UI can show a clear setup screen. */
+export const supabaseConfigErrors = [
+  !supabaseUrl && 'VITE_SUPABASE_URL is not set.',
+  supabaseUrl && !isValidUrl(supabaseUrl) && 'VITE_SUPABASE_URL must be a valid https:// URL.',
+  !supabaseKey && 'VITE_SUPABASE_ANON_KEY is not set.',
+].filter(Boolean);
+
+export const isSupabaseConfigured = supabaseConfigErrors.length === 0;
+
 const MAX_RETRIES = 2;
-const BASE_DELAY = 1000; // 1 second base delay
-const MAX_COOLDOWN = 30000; // 30 seconds max cooldown
+const BACKOFF_MS = [300, 800];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Kept for API compatibility; there is no global cooldown any more. */
+export function resetNetworkCooldown() {}
 
 /**
- * Resets the network cooldown to immediately allow outgoing requests
+ * Fetch wrapper for the Supabase client. Retries only idempotent GET requests on
+ * network errors or 5xx responses with a short backoff. Never retries aborts and
+ * never throttles auth/token refresh calls.
  */
-export function resetNetworkCooldown() {
-  consecutiveFailures = 0;
-  cooldownUntil = 0;
-  console.log('[NETWORK] Cooldown cleared manually.');
-}
-
-/**
- * Custom fetch wrapper for Supabase client.
- * Implements offline guards, exponential backoff, and failure cooldowns
- * to prevent token refresh storms during intermittent connectivity or phone sleep.
- */
-async function customResilientFetch(url, options) {
-  // 1. Check offline state
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new TypeError('Failed to fetch (device offline)');
-  }
-
-  // 2. Check active cooldown
-  const now = Date.now();
-  if (now < cooldownUntil) {
-    const remaining = Math.ceil((cooldownUntil - now) / 1000);
-    throw new TypeError(`Failed to fetch (network cooldown active for another ${remaining}s)`);
-  }
-
+async function customResilientFetch(input, init) {
+  const method = String(init?.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
+  const canRetry = method === 'GET';
   let attempt = 0;
-  while (attempt <= MAX_RETRIES) {
+  for (;;) {
     try {
-      const response = await fetch(url, options);
-
-      // Successfully resolved request
-      if (response.ok) {
-        consecutiveFailures = 0;
-        cooldownUntil = 0;
+      const response = await fetch(input, init);
+      if (canRetry && response.status >= 500 && attempt < MAX_RETRIES) {
+        await sleep(BACKOFF_MS[attempt]);
+        attempt++;
+        continue;
       }
       return response;
     } catch (error) {
+      if (error?.name === 'AbortError' || !canRetry || attempt >= MAX_RETRIES || init?.signal?.aborted) throw error;
+      await sleep(BACKOFF_MS[attempt]);
       attempt++;
-
-      const isNetworkOrDnsError = 
-        error.message?.includes('Failed to fetch') ||
-        error.message?.includes('ERR_NAME_NOT_RESOLVED') ||
-        error.name === 'TypeError';
-
-      if (isNetworkOrDnsError) {
-        consecutiveFailures++;
-        // Calculate exponential backoff cooldown window
-        const delay = Math.min(BASE_DELAY * Math.pow(2, consecutiveFailures), MAX_COOLDOWN);
-        cooldownUntil = Date.now() + delay;
-        console.error(`[NETWORK] Connection failure on attempt ${attempt}. Cooldown activated for ${delay}ms. Error: ${error.message}`);
-        throw error;
-      }
-
-      if (attempt > MAX_RETRIES) {
-        throw error;
-      }
-
-      // Retry with slight delay
-      const backoffDelay = BASE_DELAY * Math.pow(2, attempt);
-      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
     }
   }
 }
 
-// ── Create client with hardened options ───────────────────────────────────────
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false, // Per specification
-  },
-  global: {
-    fetch: customResilientFetch,
-  },
-});
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+      global: { fetch: customResilientFetch },
+    })
+  : null;
 
 export const SUPABASE_URL = supabaseUrl;

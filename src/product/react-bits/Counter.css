@@ -1,21 +1,28 @@
 .counter-container {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  max-width: 100%;
 }
 
-.counter-counter {
+.counter-container .counter-counter {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   overflow: hidden;
   line-height: 1;
 }
 
-.counter-digit {
+.counter-container .counter-digit {
   position: relative;
+  display: inline-block;
+  flex: none;
   width: 1ch;
   font-variant-numeric: tabular-nums;
 }
 
-.counter-number {
+.counter-container .counter-number {
   position: absolute;
   top: 0;
   right: 0;
@@ -24,6 +31,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: inherit;
+  white-space: nowrap;
 }
 
 .counter-container .gradient-container {

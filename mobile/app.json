@@ -5,20 +5,28 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "scheme": "workouttrackerpro",
+    "runtimeVersion": { "policy": "appVersion" },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f7f8fc"
+    },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.gautham210.workouttrackerpro"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#EAF4FF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": ["CAMERA"],
       "package": "com.gautham210.workouttrackerpro"
     },
     "web": {
@@ -27,7 +35,14 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      ["expo-image-picker", { "photosPermission": "Allow Workout Tracker Pro to select meal photos for analysis." }]
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Workout Tracker Pro to use the camera to photograph meals for analysis.",
+          "photosPermission": "Allow Workout Tracker Pro to select meal photos for analysis."
+        }
+      ]
     ]
   }
 }

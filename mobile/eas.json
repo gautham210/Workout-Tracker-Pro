@@ -1,8 +1,14 @@
 {
-  "cli": { "version": ">= 16.0.0" },
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
   "build": {
     "development": { "developmentClient": true, "distribution": "internal" },
-    "preview": { "distribution": "internal" },
-    "production": { "autoIncrement": true }
+    "preview": {
+      "distribution": "internal",
+      "env": { "EXPO_PUBLIC_BACKEND_URL": "https://workout-tracker-pro.vercel.app" }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_BACKEND_URL": "https://workout-tracker-pro.vercel.app" }
+    }
   }
 }

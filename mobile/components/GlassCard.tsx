@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, ViewStyle, Dimensions, StyleProp } from 'react-native';
+import { StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -8,9 +8,11 @@ interface GlassCardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   strong?: boolean;
+  /** Styles for the inner (padded) surface; use this instead of padding on `style`, which would thicken the border. */
+  contentStyle?: StyleProp<ViewStyle>;
 }
 
-export default function GlassCard({ children, style, strong = false }: GlassCardProps) {
+export default function GlassCard({ children, style, strong = false, contentStyle }: GlassCardProps) {
   const innerBg = strong ? 'rgba(255, 255, 255, 0.96)' : 'rgba(255, 255, 255, 0.90)';
   const borderColors: [string, string] = strong 
     ? ['rgba(255,255,255,1)', 'rgba(196,207,225,0.72)']
@@ -26,7 +28,7 @@ export default function GlassCard({ children, style, strong = false }: GlassCard
       <BlurView
         intensity={strong ? 40 : 25}
         tint="light"
-        style={[styles.blurContent, { backgroundColor: innerBg }]}
+        style={[styles.blurContent, { backgroundColor: innerBg }, contentStyle]}
       >
         {/* Absolute top thin reflection edge */}
         <LinearGradient

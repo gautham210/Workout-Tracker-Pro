@@ -8,6 +8,7 @@ export function setCors(req, res, methods) {
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', methods);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '600');
 }
 
 export function isJsonRequest(req) {
@@ -16,4 +17,9 @@ export function isJsonRequest(req) {
 
 export function errorMessage(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+/** Log-safe summary of an error: never includes stack traces, tokens or provider payloads. */
+export function safeLogMessage(error) {
+  return errorMessage(error, 'unknown').replace(/(?:Bearer\s+)?[A-Za-z0-9_-]{24,}/g, '[redacted]').slice(0, 200);
 }

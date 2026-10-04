@@ -1,7 +1,15 @@
 -- Keep trigger and event-trigger helpers internal. SECURITY DEFINER functions
 -- must never be directly callable through the exposed PostgREST RPC schema.
 revoke all on function public.handle_new_user() from public, anon, authenticated;
-revoke all on function public.rls_auto_enable() from public, anon, authenticated;
+-- rls_auto_enable() is a hosted-project helper that no repo file defines; only
+-- revoke when it exists so the migration also builds on an empty database.
+do $guard$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke all on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end
+$guard$;
 
 -- The graph sync functions are intentionally callable by signed-in clients.
 -- Explicit grants make this true even if the project's default function grants

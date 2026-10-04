@@ -1,146 +1,124 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, getConfigError } from './config';
 
 const memoryDb: { [key: string]: string } = {};
 let useMemoryOnly = false;
 
-// Test if AsyncStorage actually works
-try {
-  AsyncStorage.getItem('__test_wtp_storage__').then(() => {}).catch(() => {
+// Robust in-memory fallback for environments where the AsyncStorage native module is unavailable.
+async function withFallback<T>(run: () => Promise<T>, fallback: () => T): Promise<T> {
+  if (useMemoryOnly) return fallback();
+  try {
+    return await run();
+  } catch {
     useMemoryOnly = true;
-  });
-} catch {
-  useMemoryOnly = true;
+    return fallback();
+  }
 }
 
-// Robust in-memory storage fallback to prevent emulator environment crashes when AsyncStorage native module is null
 export const safeStorage = {
-  getItem: async (key: string): Promise<string | null> => {
-    if (useMemoryOnly) return memoryDb[key] || null;
-    try {
-      const res = await AsyncStorage.getItem(key);
-      return res;
-    } catch {
-      useMemoryOnly = true;
-      return memoryDb[key] || null;
-    }
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    if (useMemoryOnly) {
-      memoryDb[key] = value;
-      return;
-    }
-    try {
-      await AsyncStorage.setItem(key, value);
-    } catch {
-      useMemoryOnly = true;
-      memoryDb[key] = value;
-    }
-  },
-  removeItem: async (key: string): Promise<void> => {
-    if (useMemoryOnly) {
-      delete memoryDb[key];
-      return;
-    }
-    try {
-      await AsyncStorage.removeItem(key);
-    } catch {
-      useMemoryOnly = true;
-      delete memoryDb[key];
-    }
-  },
-  multiSet: async (pairs: [string, string][]): Promise<void> => {
-    if (useMemoryOnly) {
-      pairs.forEach(([key, val]) => {
-        memoryDb[key] = val;
-      });
-      return;
-    }
-    try {
-      await (AsyncStorage as any).multiSet(pairs);
-    } catch {
-      useMemoryOnly = true;
-      pairs.forEach(([key, val]) => {
-        memoryDb[key] = val;
-      });
-    }
-  },
-  multiGet: async (keys: string[]): Promise<[string, string | null][]> => {
-    if (useMemoryOnly) {
-      return keys.map(k => [k, memoryDb[k] || null]);
-    }
-    try {
-      return await (AsyncStorage as any).multiGet(keys);
-    } catch {
-      useMemoryOnly = true;
-      return keys.map(k => [k, memoryDb[k] || null]);
-    }
-  },
-  multiRemove: async (keys: string[]): Promise<void> => {
-    if (useMemoryOnly) {
-      keys.forEach(k => delete memoryDb[k]);
-      return;
-    }
-    try {
-      await (AsyncStorage as any).multiRemove(keys);
-    } catch {
-      useMemoryOnly = true;
-      keys.forEach(k => delete memoryDb[k]);
-    }
-  }
+  getItem: (key: string): Promise<string | null> =>
+    withFallback(() => AsyncStorage.getItem(key), () => memoryDb[key] ?? null),
+  setItem: (key: string, value: string): Promise<void> =>
+    withFallback(() => AsyncStorage.setItem(key, value), () => { memoryDb[key] = value; }),
+  removeItem: (key: string): Promise<void> =>
+    withFallback(() => AsyncStorage.removeItem(key), () => { delete memoryDb[key]; }),
+  multiSet: (pairs: [string, string][]): Promise<void> =>
+    withFallback(() => (AsyncStorage as any).multiSet(pairs), () => { pairs.forEach(([k, v]) => { memoryDb[k] = v; }); }),
+  multiGet: (keys: string[]): Promise<[string, string | null][]> =>
+    withFallback(() => (AsyncStorage as any).multiGet(keys), () => keys.map((k) => [k, memoryDb[k] ?? null] as [string, string | null])),
+  multiRemove: (keys: string[]): Promise<void> =>
+    withFallback(() => (AsyncStorage as any).multiRemove(keys), () => { keys.forEach((k) => delete memoryDb[k]); }),
 };
 
-// P0: Secure session storage implementation
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+// Secure session storage. SecureStore values are limited (~2048 bytes), so the session JSON is chunked.
+const CHUNK_SIZE = 1800;
+// Non-persistent fallback used only if the native keystore itself fails; never written to plaintext disk.
+const volatileSession: Record<string, string> = {};
+
+const countKey = (key: string) => `${key}.chunks`;
+const chunkKey = (key: string, i: number) => `${key}.chunk${i}`;
+
+async function secureDeleteAll(key: string) {
+  const count = Number(await SecureStore.getItemAsync(countKey(key)).catch(() => null));
+  if (Number.isFinite(count) && count > 0) {
+    for (let i = 0; i < count; i++) await SecureStore.deleteItemAsync(chunkKey(key, i)).catch(() => undefined);
+  }
+  await SecureStore.deleteItemAsync(countKey(key)).catch(() => undefined);
+  await SecureStore.deleteItemAsync(key).catch(() => undefined);
+}
+
+async function secureSet(key: string, value: string) {
+  const parts: string[] = [];
+  for (let i = 0; i < value.length; i += CHUNK_SIZE) parts.push(value.slice(i, i + CHUNK_SIZE));
+  await secureDeleteAll(key);
+  for (let i = 0; i < parts.length; i++) await SecureStore.setItemAsync(chunkKey(key, i), parts[i]);
+  await SecureStore.setItemAsync(countKey(key), String(parts.length));
+}
+
+async function secureGet(key: string): Promise<string | null> {
+  const countRaw = await SecureStore.getItemAsync(countKey(key));
+  if (countRaw) {
+    const count = Number(countRaw);
+    let out = '';
+    for (let i = 0; i < count; i++) {
+      const part = await SecureStore.getItemAsync(chunkKey(key, i));
+      if (part == null) return null;
+      out += part;
+    }
+    return out;
+  }
+  return SecureStore.getItemAsync(key); // legacy unchunked value
+}
 
 const authStorage = {
   getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') return safeStorage.getItem(key);
     try {
-      if (Platform.OS === 'web') return await safeStorage.getItem(key);
-      const val = await SecureStore.getItemAsync(key);
-      // Fallback to AsyncStorage to preserve existing sessions during migration
-      if (!val) {
-        const fallback = await safeStorage.getItem(key);
-        if (fallback) await SecureStore.setItemAsync(key, fallback);
-        return fallback;
+      const val = await secureGet(key);
+      if (val) {
+        // Remove any plaintext copy left over from older builds.
+        await safeStorage.removeItem(key).catch(() => undefined);
+        return val;
       }
-      return val;
-    } catch {
-      return await safeStorage.getItem(key);
+      const legacy = await safeStorage.getItem(key);
+      if (legacy) {
+        await secureSet(key, legacy);
+        await safeStorage.removeItem(key);
+        return legacy;
+      }
+      return volatileSession[key] ?? null;
+    } catch (error) {
+      console.warn('[auth] secure storage read failed', error);
+      return volatileSession[key] ?? null;
     }
   },
   setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') return safeStorage.setItem(key, value);
     try {
-      if (Platform.OS === 'web') {
-        await safeStorage.setItem(key, value);
-        return;
-      }
-      await SecureStore.setItemAsync(key, value);
-    } catch {
-      await safeStorage.setItem(key, value);
+      await secureSet(key, value);
+      delete volatileSession[key];
+    } catch (error) {
+      console.warn('[auth] secure storage write failed; session kept in memory only', error);
+      volatileSession[key] = value;
     }
   },
   removeItem: async (key: string): Promise<void> => {
-    try {
-      if (Platform.OS === 'web') {
-        await safeStorage.removeItem(key);
-        return;
-      }
-      await SecureStore.deleteItemAsync(key);
-      // Also clear fallback just in case
-      await safeStorage.removeItem(key);
-    } catch {
-      await safeStorage.removeItem(key);
-    }
+    delete volatileSession[key];
+    if (Platform.OS === 'web') return safeStorage.removeItem(key);
+    try { await secureDeleteAll(key); } catch (error) { console.warn('[auth] secure storage delete failed', error); }
+    await safeStorage.removeItem(key).catch(() => undefined);
   },
 };
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://egefeiuyktelihsbbzyt.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_hd_-u_hgdVcXXjkCbRPkDA_xHf9XOfe';
+/** Non-null when env configuration is missing; the root layout renders this instead of the app. */
+export const configError = getConfigError();
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// createClient throws on empty values, so use inert placeholders when misconfigured (the app never renders in that case).
+export const supabase = createClient(SUPABASE_URL || 'https://config-missing.invalid', SUPABASE_ANON_KEY || 'config-missing', {
   auth: {
     storage: authStorage,
     autoRefreshToken: true,

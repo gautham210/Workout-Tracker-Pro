@@ -1,71 +1,56 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
-import { safeStorage as AsyncStorage } from '../lib/supabase';
-import { Droplet, Settings, X, Check } from 'lucide-react-native';
-import GlassCard from './GlassCard';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Droplet } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { safeStorage } from '../lib/supabase';
 
 interface HydrationAlertProps {
-  completedSetsCount: number;
+  /** Kept for call-site compatibility; reminders are time-based only. */
+  completedSetsCount?: number;
   onDrinkLogged?: (oz: number) => void;
 }
 
-export default function HydrationAlert({ completedSetsCount, onDrinkLogged }: HydrationAlertProps) {
-  const [showPopup, setShowPopup] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [waterLogged, setWaterLogged] = useState(0);
+const SHOW_MS = 6000;
 
-  const [type, setType] = useState('disabled'); // 'disabled' | 'time' | 'sets'
-  const [interval, setIntervalVal] = useState(4); // 10/15/20 min or 3/4/5 sets
+/**
+ * Time-based hydration reminder. The interval is chosen in Settings > Workout reminders
+ * (storage keys wtp_hydro_type = 'time' | 'disabled', wtp_hydro_interval = minutes). Off by default.
+ */
+export default function HydrationAlert(_props: HydrationAlertProps) {
+  const insets = useSafeAreaInsets();
+  const [visible, setVisible] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const setsTrackerRef = useRef(0);
-  const timerRef = useRef<any>(null);
-
-  // Load configuration from storage
   useEffect(() => {
-    const loadConfig = async () => {
-      const storedType = await AsyncStorage.getItem('wtp_hydro_type') || 'disabled';
-      const storedInterval = await AsyncStorage.getItem('wtp_hydro_interval') || '4';
-      const storedWater = await AsyncStorage.getItem('wtp_hydro_water_today') || '0';
-
-      setType(storedType);
-      setIntervalVal(parseInt(storedInterval, 10));
-      setWaterLogged(parseInt(storedWater, 10));
-      setupTimer(storedType, parseInt(storedInterval, 10));
-    };
-
-    loadConfig();
-
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+    (async () => {
+      const type = await safeStorage.getItem('wtp_hydro_type');
+      const minutes = Number(await safeStorage.getItem('wtp_hydro_interval'));
+      if (cancelled || type !== 'time' || !Number.isFinite(minutes) || minutes < 1) return;
+      interval = setInterval(() => {
+        setVisible(true);
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        hideTimer.current = setTimeout(() => setVisible(false), SHOW_MS);
+      }, minutes * 60_000);
+    })().catch(() => undefined);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
     };
   }, []);
 
-  const saveConfig = async (newType: string, newInterval: number) => {
-    setType(newType);
-    setIntervalVal(newInterval);
-    await AsyncStorage.setItem('wtp_hydro_type', newType);
-    await AsyncStorage.setItem('wtp_hydro_interval', String(newInterval));
-    setShowSettings(false);
-
-    setsTrackerRef.current = 0;
-    setupTimer(newType, newInterval);
-  };
-
-  const setupTimer = (alertType: string, intervalVal: number) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (alertType === 'time') {
-      timerRef.current = setInterval(() => {
-        setShowPopup(true);
-        setTimeout(() => setShowPopup(false), 5000);
-      }, intervalVal * 60000);
-    }
-  };
-
-  if (!showPopup) return null;
-
+  if (!visible) return null;
   return (
-    <View style={{ position: 'absolute', top: 50, right: 20, backgroundColor: '#0ea5e9', padding: 12, borderRadius: 20, elevation: 5, zIndex: 9999 }}>
-      <Text style={{ color: 'white', fontWeight: 'bold' }}>Stay Hydrated! 💧</Text>
+    <View accessibilityRole="alert" accessibilityLiveRegion="polite" pointerEvents="none" style={[styles.toast, { top: insets.top + 12 }]}>
+      <Droplet color="#fff" size={16} />
+      <Text style={styles.text}>Time to hydrate</Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  toast: { position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0b5fc4', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, elevation: 5, zIndex: 9999 },
+  text: { color: '#fff', fontWeight: '700' },
+});

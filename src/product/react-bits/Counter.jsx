@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 
 import './Counter.css';
 
-function Number({ mv, number, height }) {
+function RollingNumber({ mv, number, height }) {
   let y = useTransform(mv, latest => {
     let placeValue = latest % 10;
     let offset = (10 + number - placeValue) % 10;
@@ -53,27 +53,23 @@ function Digit({ place, value, height, digitStyle }) {
   return (
     <span className="counter-digit" style={{ height, ...digitStyle }}>
       {Array.from({ length: 10 }, (_, i) => (
-        <Number key={i} mv={animatedValue} number={i} height={height} />
+        <RollingNumber key={i} mv={animatedValue} number={i} height={height} />
       ))}
     </span>
   );
 }
 
+function defaultPlaces(value) {
+  const text = value.toString();
+  const dot = text.indexOf('.');
+  return [...text].map((ch, i) => (ch === '.' ? '.' : 10 ** (dot === -1 ? text.length - i - 1 : i < dot ? dot - i - 1 : -(i - dot))));
+}
+
 export default function Counter({
-  value,
+  value: rawValue,
   fontSize = 100,
   padding = 0,
-  places = [...value.toString()].map((ch, i, a) => {
-    ch == '.';
-    if (ch === '.') {
-      return '.';
-    } else {
-      return (
-        10 **
-        (a.indexOf('.') === -1 ? a.length - i - 1 : i < a.indexOf('.') ? a.indexOf('.') - i - 1 : -(i - a.indexOf('.')))
-      );
-    }
-  }),
+  places: placesProp,
   gap = 8,
   borderRadius = 4,
   horizontalPadding = 8,
@@ -88,6 +84,9 @@ export default function Counter({
   topGradientStyle,
   bottomGradientStyle
 }) {
+  // Digits only: negative/NaN/exponent values would otherwise produce NaN places.
+  const value = Number.isFinite(Number(rawValue)) ? Math.min(Math.max(0, Number(rawValue)), 1e15) : 0;
+  const places = placesProp || defaultPlaces(value);
   const height = fontSize + padding;
   const defaultCounterStyle = {
     fontSize,

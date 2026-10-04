@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import AppShell from './product/AppShell';
 
+const AppShell = lazy(() => import('./product/AppShell'));
 const LoginExperience = lazy(() => import('./product/LoginExperience'));
 const HomeExperience = lazy(() => import('./product/HomeExperience'));
 const WorkoutExperience = lazy(() => import('./product/WorkoutExperience'));
@@ -18,6 +18,13 @@ const LibraryExperience = lazy(() => import('./product/LibraryExperience'));
 const InsightsExperience = lazy(() => import('./product/InsightsExperience'));
 const NutritionistExperience = lazy(() => import('./product/NutritionistExperience'));
 
+const ShellSkeleton = () => (
+  <div className="shell-skeleton" aria-busy="true" aria-live="polite">
+    <div className="shell-skeleton-bar" />
+    <p>Loading your workspace…</p>
+  </div>
+);
+
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -31,7 +38,7 @@ function App() {
       <Suspense fallback={<main className="route-loading" aria-live="polite">Loading your workspace…</main>}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginExperience />} />
-          <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><Suspense fallback={<ShellSkeleton />}><AppShell /></Suspense></ProtectedRoute>}>
             <Route index element={<HomeExperience />} />
             <Route path="workout" element={<WorkoutExperience />} />
           <Route path="history" element={<HistoryExperience />} />

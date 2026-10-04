@@ -7,13 +7,9 @@ import { HugeiconsIcon } from '@hugeicons/react';
 // the upstream React Bits PromptBar while avoiding the broken barrel.
 import ArrowDown01Icon from '@hugeicons/core-free-icons/ArrowDown01Icon';
 import Attachment01Icon from '@hugeicons/core-free-icons/Attachment01Icon';
-import Calendar03Icon from '@hugeicons/core-free-icons/Calendar03Icon';
 import Cancel01Icon from '@hugeicons/core-free-icons/Cancel01Icon';
-import ChartLineData01Icon from '@hugeicons/core-free-icons/ChartLineData01Icon';
 import File02Icon from '@hugeicons/core-free-icons/File02Icon';
-import Globe02Icon from '@hugeicons/core-free-icons/Globe02Icon';
 import HelpCircleIcon from '@hugeicons/core-free-icons/HelpCircleIcon';
-import Mail01Icon from '@hugeicons/core-free-icons/Mail01Icon';
 import Mic01Icon from '@hugeicons/core-free-icons/Mic01Icon';
 import PlusSignIcon from '@hugeicons/core-free-icons/PlusSignIcon';
 import SparklesIcon from '@hugeicons/core-free-icons/SparklesIcon';
@@ -26,33 +22,13 @@ const EASE_IN_OUT = [0.77, 0, 0.175, 1];
 const LINE = 22;
 const EDGE = 11;
 
+// Generic defaults only: callers supply their own sources, commands, models and efforts.
 const DEFAULT_SOURCES = [
-  {
-    key: 'files',
-    name: 'Photos & files',
-    description: 'Upload from this device',
-    icon: Attachment01Icon,
-    attach: true
-  },
-  { key: 'web', name: 'Web search', description: 'Live results', icon: Globe02Icon },
-  { key: 'sales', name: 'Sales data', description: 'Revenue and churn', icon: ChartLineData01Icon },
-  { key: 'docs', name: 'Documents', description: 'Specs, notes, briefs', icon: File02Icon },
-  { key: 'mail', name: 'Mail', description: 'Read and draft mail', icon: Mail01Icon },
-  { key: 'calendar', name: 'Calendar', description: 'Events and availability', icon: Calendar03Icon }
+  { key: 'files', name: 'Photos & files', description: 'Upload from this device', icon: Attachment01Icon, attach: true }
 ];
-const DEFAULT_COMMANDS = [
-  { key: 'summarize', name: '/summarize', description: 'Digest the thread so far' },
-  { key: 'compare', name: '/compare', description: 'Two options side by' },
-  { key: 'draft', name: '/draft', description: 'Write a first version' },
-  { key: 'explain', name: '/explain', description: 'A plain-language walkthrough' },
-  { key: 'tasks', name: '/tasks', description: 'Turn this into a to-do list' }
-];
-const DEFAULT_MODELS = [
-  { key: 'nova-3', name: 'Nova 3', tag: 'Flagship' },
-  { key: 'nova-mini', name: 'Nova Mini', tag: 'Fast' },
-  { key: 'nova-2', name: 'Nova 2', tag: 'Legacy' }
-];
-const DEFAULT_EFFORTS = ['Low', 'Medium', 'High', 'Extra', 'Max'];
+const DEFAULT_COMMANDS = [];
+const DEFAULT_MODELS = [];
+const DEFAULT_EFFORTS = [];
 
 const mix = (a, b, t) => a + (b - a) * t;
 const pathAt = (a, b, t) => {
@@ -104,7 +80,7 @@ function SendGlyph({ busy, morphDuration, squash, tilt }) {
     <svg
       ref={svgRef}
       className="prompt-bar__glyph"
-      viewBox="0 24"
+      viewBox="0 0 24 24"
       aria-hidden="true"
       fill="currentColor"
       stroke="currentColor"
