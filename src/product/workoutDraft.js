@@ -11,7 +11,7 @@ const defaultStorage = () => { try { return globalThis.localStorage || null; } c
 
 export const blankSet = (over = {}) => ({ id: newId(), weight_kg: '', reps: '', rpe: '', rir: '', notes: '', is_warmup: false, completed: false, ...over });
 
-const numberOrNull = (value) => (value === '' || value === null || value === undefined || !Number.isFinite(Number(value)) ? null : Number(value));
+const integerOrNull = (value) => (value === '' || value === null || value === undefined || !Number.isFinite(Number(value)) ? null : Math.round(Number(value)));
 
 /** Builds one session exercise. `plan` is an optional coach/import prescription. */
 export function buildExercise(exercise, plan = {}) {
@@ -136,7 +136,7 @@ export function buildWorkoutGraph({ graphId, exercises, startedAt, title, fallba
   const sendable = exercises.map((item, orderIndex) => {
     const sets = item.sets.filter((set) => set.completed && Number(set.reps) >= 1 && Number(set.weight_kg || 0) >= 0).map((set, index) => ({
       id: set.id, set_number: index + 1, weight_kg: Number(set.weight_kg) || 0, reps: Math.floor(Number(set.reps)), completed: true,
-      rpe: numberOrNull(set.rpe), rir: numberOrNull(set.rir), is_warmup: set.is_warmup === true, notes: set.notes ? String(set.notes).slice(0, 500) : null,
+      rpe: integerOrNull(set.rpe), rir: integerOrNull(set.rir), is_warmup: set.is_warmup === true, notes: set.notes ? String(set.notes).slice(0, 500) : null,
     }));
     return {
       id: item.id || null, exercise_id: item.exercise.id, order_index: orderIndex,
