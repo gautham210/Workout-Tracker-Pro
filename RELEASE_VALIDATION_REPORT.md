@@ -2,15 +2,15 @@
 
 ## Current Repository & Deployment State
 - **Current Branch**: `master`
-- **Current Commit**: `8c27b235708bef42c3e330d73c25dbf8c68161d8`
+- **Current Certified Code Commit**: `f2ded007b89dbc91bb38fc7633ddb316f145089b`
 - **Remote**: `https://github.com/gautham210/Workout-Tracker-Pro.git`
-- **Remote Status**: Synchronized with `origin/master`
+- **Remote Status**: `origin/master` points to certified code commit `f2ded007b89dbc91bb38fc7633ddb316f145089b`
 - **Branch Comparison**:
-  - `master`: 28 commits representing the full, hardened production architecture. Contains the unified canonical exercise catalog (`shared/exerciseCatalog.js`), 20 inline SVG movement illustrations, 5 bundled photographs in `shared/exercise-art/`, the hardened Vercel API backend (`api/`), the Expo Router mobile application (`mobile/`), and the 96-test automated verification suite (`tests/`).
-  - `origin/master`: Matches local `master`. Commit `8c27b23` is the initial validation report documentation commit; application code prior to that was productionized at `e5d7487`.
+  - `master`: Full, hardened production architecture. Contains the unified canonical exercise catalog (`shared/exerciseCatalog.js`), 20 inline SVG movement illustrations, 5 bundled photographs in `shared/exercise-art/`, the hardened Vercel API backend (`api/`), the Expo Router mobile application (`mobile/`), and the 96-test automated verification suite (`tests/`).
+  - `origin/master`: Matches certified code commit `f2ded00`. Holds the verified production code.
   - `origin/main`: Stale divergent branch (8 commits, stopped at `10d378d` in early September 2026 with no common ancestor). Does not contain the unified catalog, the new migration suite, or the hardened API.
   - **Intended Release Branch**: `master`.
-- **Working Tree State**: Clean after staging the integer RPE/RIR database compatibility fix in `src/product/workoutDraft.js`.
+- **Working Tree State**: Clean.
 - **Deployment Assumptions**:
   - Web & API: Deployed via Vercel.
   - Database & Auth: Remote Supabase project `workout-helper-pro` (`egefeiuyktelihsbbzyt`).
@@ -73,15 +73,32 @@
 - **Mobile Android Bundle Export (`npx expo export --platform android`)**: Metro Hermes bundle succeeded (6.1 MB bytecode, 32 bundled assets).
 - **Mobile iOS Bundle Export (`npx expo export --platform ios`)**: Metro Hermes bundle succeeded (5.7 MB bytecode, 28 bundled assets).
 
-### 5. AI API Endpoints & Provider Integration — SEPARATED EVIDENCE
-- **Authentication Guard**: Verified with live bearer tokens. Anonymous or malformed requests are rejected with 401.
-- **`/api/parse-workout`**: PROVEN PASS for deterministic structural regex fallback (returns HTTP 200, parses exercises, sets, weights, and reps). Live NVIDIA NIM provider request is **NOT VERIFIED** due to missing `NVIDIA_API_KEY` in execution environment.
-- **`/api/ai-chat`**: Explicitly returns HTTP 503 (`{ error: 'AI Coach is not configured.' }`) when `NVIDIA_API_KEY` is not present. Live AI Coach generation is **NOT VERIFIED**.
-- **`/api/parse-food`**: Image structure validation verified (corrupted/truncated images rejected with HTTP 422). Returns HTTP 503 (`{ error: 'Food Scanner is not configured.', code: 'not_configured' }`) when `NVIDIA_API_KEY` or `OPENAI_API_KEY` is absent. Live vision analysis is **NOT VERIFIED**.
+### 5. AI API Endpoints & Provider Integration — LIVE VERIFICATION AUDIT
+- **Vercel CLI & Environment**: Authenticated interactively via OAuth device flow (`NGPV-ZNNM`). Inspected production environment variables: `NVIDIA_API_KEY` exists in Production/Preview; `OPENAI_API_KEY` is not configured.
+- **Authentication Guard & Guardrails**: **PROVEN PASS**. Live bearer tokens enforced. Anonymous requests rejected with HTTP 401; oversized payloads rejected with HTTP 400; malformed/corrupted image URIs rejected with HTTP 422.
+- **`/api/parse-workout`**: PROVEN PASS for deterministic structural regex fallback (returns HTTP 200, parsed sets/reps). Live provider call returned `source: "fallback"` due to upstream NVIDIA HTTP 410 error. Real provider generation is **FAIL (Upstream Provider Inactive)**.
+- **`/api/ai-chat`**: Returns HTTP 502 (`[ai-chat] provider failure 410 status code (no body)`). Upstream NVIDIA inference endpoint returns HTTP 410 Gone due to account-level missing public inference provisioning on NVIDIA NIM. Real model response is **FAIL (Upstream Provider Inactive)**.
+- **`/api/parse-food`**: Image structure validation verified (magic bytes, size bounds). Returns HTTP 504 due to provider timeout on NVIDIA vision model. Real vision analysis is **FAIL (Upstream Provider Inactive)**.
+- **Root Cause & Remedy**: The configured `NVIDIA_API_KEY` in Vercel lacks hosted inference permissions on `https://integrate.api.nvidia.com/v1`, returning HTTP 410. To achieve full certification, an active `NVIDIA_API_KEY` with NIM public endpoint access or a valid `OPENAI_API_KEY` must be configured in Vercel.
 
-### 6. Mobile Runtime — SEPARATED EVIDENCE
-- **Expo Bundler / Hermes Bytecode**: PROVEN PASS for both Android and iOS exports.
-- **Physical Device / Emulator Runtime**: **NOT VERIFIED** because no Android emulator or physical device was attached (`adb devices` returned 0 devices).
+### 6. Mobile Runtime (Android Emulator & Expo Go) — PROVEN PASS
+- **Expo Bundler & Hermes Bytecode**: PROVEN PASS for Android Hermes bytecode export (6.1 MB bytecode, 32 bundled assets) and iOS Hermes bytecode export (5.7 MB bytecode, 28 bundled assets). Static type check (`cd mobile && npx tsc --noEmit`) passes with 0 errors.
+- **Physical Device / Android Emulator Runtime**: **PROVEN PASS**
+  - **Runtime Environment**: Android Emulator `emulator-5554` (`medium_phone`, Android 16 API 36) executing Expo Go SDK 57 connected live to Metro bundler.
+  - **1. Authentication**: Signed in live with real Supabase credentials (`protracker.release.tester@gmail.com`), verified session persistence across app restarts.
+  - **2. Home Screen**: Verified athlete greeting, "All changes synced" status badge, working volume, and streak cards.
+  - **3. Train & Exercise Library**: Browsed 27 canonical exercises with muscle filter chips (Chest, Back, Legs, Shoulders, Arms, Core), verified instant rendering of inline vector SVG movement illustrations and bundled photographs.
+  - **4. Workout Builder**: Built a custom workout routine by adding `Barbell Bench Press` and `Abs Machine`, verified sets and reps stepper controls.
+  - **5. Active Workout & Set Logging**: Launched active workout interface, entered weight (kg) and rep values, checked off completed sets with reactive UI updates.
+  - **6. Rest Timer**: Floating rest timer countdown executed accurately (e.g., 77s remaining), verified interactive controls: Pause, +30s increment, and Skip.
+  - **7. Workout Completion**: Concluded workout, validated session summary confirmation modal, dismissed local device persistence confirmation.
+  - **8. History & Progress**: Verified past session feed, total working volume calculations, and Brzycki/Epley estimated 1RM calculations.
+  - **9. Nutrition**: Verified macro target tracking, manual meal logging, and photo capture dialog triggers (camera/gallery options).
+  - **10. Profile & Account Settings**: Verified athlete weight (82.0 kg), navigation settings list, and safe sign-out confirmation.
+  - **11. Logout & Relogin**: Verified clean logout returning to `/sign-in`, re-entered credentials, and returned directly to Home.
+  - **12. Crash Recovery & Draft Persistence**: Started an in-flight workout, logged Set 1, force-killed app process (`adb shell am force-stop host.exp.exponent`), reopened Expo Go, confirmed "UNFINISHED WORKOUT" card with "Resume" action, and verified all in-flight draft sets were restored intact.
+  - **13. Offline Outbox & Background Sync**: Simulated network loss (`svc wifi disable; svc data disable; cmd connectivity airplane-mode enable`), app cleanly surfaced offline notice ("You appear to be offline"), logged and completed a workout (`Barbell Deadlift`, 40 kg x 10 reps) entirely offline to local SQLite outbox; restored connectivity (`svc wifi enable; svc data enable; cmd connectivity airplane-mode disable`), sync engine automatically flushed outbox to cloud, and UI updated to "Synced".
+  - **14. Remote Supabase Cloud Verification**: Verified live on remote Supabase (`egefeiuyktelihsbbzyt`) via Node SDK, confirming 6 remote sessions for the tester account, specifically verifying that the offline-created session `2c3012bc-687e-471f-8251-13ef68eb41fd` and set `3f5f963e-17c0-4b01-ad15-7f9aabecf032` (40 kg x 10 reps) successfully persisted in `workout_sessions`, `session_exercises`, and `sets` in the cloud.
 
 ---
 
@@ -94,13 +111,13 @@
 | **3. History** | **PROVEN PASS** | Real `workout_sessions` hierarchy query with exercises and sets fetched live |
 | **4. Progress** | **PROVEN PASS** | Total working volume, Brzycki/Epley e1RM, and local-day streak calculations verified on real records |
 | **5. Nutrition** | **PROVEN PASS** | Live inserted and queried meals in `food_entries`; daily totals computed |
-| **6. Food Scanner** | **NOT VERIFIED** | Pipeline and image validation verified; live vision provider unverified due to missing API key (returns 503) |
-| **7. AI Coach** | **NOT VERIFIED** | Auth and rate-limiting verified; live model response unverified due to missing API key (returns 503) |
-| **8. Workout Import** | **PROVEN PASS (Fallback) / NOT VERIFIED (AI)** | Deterministic regex fallback fully working; live AI model call unverified without API key |
+| **6. Food Scanner** | **FAIL (Upstream Provider Inactive)** | Pipeline and image structure validation verified; live vision provider request timed out (HTTP 504) due to NVIDIA NIM permissions |
+| **7. AI Coach** | **FAIL (Upstream Provider Inactive)** | Auth, rate-limiting, and guardrails verified; live inference returns HTTP 502 due to upstream NVIDIA NIM HTTP 410 Gone |
+| **8. Workout Import** | **PROVEN PASS (Fallback) / FAIL (AI Provider)** | Deterministic regex fallback fully working (returns 200); live AI model call returned 410 and fell back to regex (`source: "fallback"`) |
 | **9. Exercise Images** | **PROVEN PASS** | 5 bundled JPEGs + 20 vector motion SVG strings verified; 0 remote dependencies |
 | **10. Offline Sync** | **PROVEN PASS** | `enqueuePendingWorkout` and FIFO `flushPendingWorkouts` verified with simulated offline/online transitions |
-| **11. Security** | **PROVEN PASS** | Secret scan clean; cross-user RLS isolation proven; spoofed `user_id` writes denied |
-| **12. Mobile Runtime** | **NOT VERIFIED** | Static typing and Hermes bytecode export pass; live device/emulator execution unverified (no device attached) |
+| **11. Security** | **PROVEN PASS** | Secret scan clean; cross-user RLS isolation proven; spoofed `user_id` writes denied; input guards verified |
+| **12. Mobile Runtime** | **PROVEN PASS** | Complete live flow on Android emulator with Expo Go: Login, Tabs, Catalog, Images, Builder, Active Sets, Rest Timer, Completion, History, Progress, Nutrition, Profile, Logout/Relogin, Crash Recovery, Offline Outbox, and Remote Supabase Cloud Persistence |
 
 ---
 
@@ -109,11 +126,11 @@
 **PROJECT STATUS:**  
 `NOT YET FULLY CERTIFIED`
 
-*(Rationale: While all code-level checks, remote database migrations, live authentication, cross-user RLS policies, offline sync logic, and export bundles pass with 100% success, live AI provider calls require `NVIDIA_API_KEY` / `OPENAI_API_KEY` credentials in production, and native mobile runtime requires an attached emulator or physical device. Following strict engineering principles, these items remain honestly designated as NOT VERIFIED rather than assumed to pass.)*
+*(Rationale: Blocker 2 — Mobile Runtime — is 100% PROVEN PASS on a live Android emulator executing all required user journeys, crash recovery, and offline cloud synchronization. For Blocker 1 — Real AI Provider — Vercel CLI authentication was successfully completed via OAuth device flow, and production configuration was audited. However, the configured production `NVIDIA_API_KEY` failed live verification because upstream NVIDIA NIM returns `HTTP 410 Gone` on hosted inference endpoints (`https://integrate.api.nvidia.com/v1/chat/completions`), and no alternative `OPENAI_API_KEY` is configured in Vercel. In strict accordance with release engineering standards, the project status remains honestly designated as `NOT YET FULLY CERTIFIED` until an active inference provider key is provisioned.)*
 
 ---
 
 ## Known Non-Blocking Follow-up Items
 1. **Divergent `main` branch**: `origin/main` is an orphaned branch frozen at an earlier prototype stage. The active, production-ready codebase resides on `master`.
 2. **Mobile Build Tooling Audit**: `npm audit` on `mobile/` flags transitive build-time CLI dependencies in Expo SDK 57 / React Native CLI tooling (`metro`, `braces`). These do not affect runtime security in the compiled Hermes bundle.
-3. **Live AI Production Credentials**: Configure `NVIDIA_API_KEY` (or `OPENAI_API_KEY`) in the Vercel project environment settings to activate live AI Coach and Food Vision scanner endpoints.
+3. **Live AI Production Credentials**: Configure `NVIDIA_API_KEY` (or `OPENAI_API_KEY`) in the Vercel project environment settings or provide a `VERCEL_TOKEN` to enable live testing of AI Coach and Food Vision scanner endpoints.
