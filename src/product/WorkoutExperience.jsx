@@ -141,7 +141,14 @@ export default function WorkoutExperience() {
       return;
     }
     if (isNetworkError(error)) {
-      if (enqueuePendingWorkout(userId, graph, { error: String(error.message || error) })) {
+      // Capture movement names now: a queued workout is, by definition, waiting for a network
+      // that is not there, so `exercises.id` cannot be resolved to a name later.
+      const labels = Object.fromEntries(
+        graph.exercises.map((row) => [row.exercise_id, exercises.find((item) => item.exercise?.id === row.exercise_id)?.exercise || null])
+          .filter(([, value]) => value)
+          .map(([id, value]) => [id, { name: value.name ?? null, muscle_group: value.muscle_group ?? null }]),
+      );
+      if (enqueuePendingWorkout(userId, graph, { error: String(error.message || error), labels })) {
         clearDraft(userId);
         refreshPending();
         setSummary({ volume: totalVolume(exercises), sets: workingSetCount(exercises) });
@@ -194,7 +201,7 @@ export default function WorkoutExperience() {
         </>
       ) : (
         <>
-          <section className="active-topline"><button className="icon-button" onClick={backToBuilder} type="button" aria-label="Back to workout builder"><ChevronLeft size={21} /></button><span>{completedSets} sets logged</span><HoldButton className="finish-hold" size="sm" holdTime={850} resetAfter={750} disabled={save.status === 'saving'} backgroundColor="rgba(11,36,68,.82)" fillColor="#007aff" onHold={finishWorkout} doneLabel="Saving…" icon={<Check size={14} />}>Hold to finish</HoldButton></section>
+          <section className="active-topline"><button className="icon-button" onClick={backToBuilder} type="button" aria-label="Back to workout builder"><ChevronLeft size={21} /></button><span>{completedSets} sets logged</span><HoldButton className="finish-hold" size="sm" holdTime={850} resetAfter={750} disabled={save.status === 'saving'} backgroundColor="rgba(11,36,68,.82)" fillColor="#007aff" onHold={finishWorkout} onTap={finishWorkout} doneLabel="Saving…" icon={<Check size={14} />}>Hold to finish</HoldButton></section>
           <div className="workout-progress" aria-label={`${completedSets} completed sets`}><span style={{ width: `${Math.min(100, (completedSets / Math.max(1, totalSets)) * 100)}%` }} /></div>
           <p className={`draft-note ${storageFailed ? 'is-warning' : ''}`}>{storageFailed ? 'This device could not store your progress. Finish soon so nothing is lost.' : 'Saved on this device as you go'}</p>
           {restEndsAt && <RestTimer endsAt={restEndsAt} onExtend={() => setRestEndsAt((current) => (current || Date.now()) + 30_000)} onClose={() => setRestEndsAt(null)} />}

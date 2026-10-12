@@ -144,22 +144,28 @@ export default function HoldButton({
     if (e.pointerType !== 'touch') endPointer(e, { drifted: true });
   };
 
+  // Space reports ' ' in modern browsers and 'Spacebar' in older ones. Neither is ever ''.
+  const isHoldKey = (key) => key === 'Enter' || key === ' ' || key === 'Spacebar';
+
   const handleKeyDown = e => {
     if (e.key === 'Escape') {
       if (inputRef.current === 'key') release({ drifted: true });
       return;
     }
-    if (e.key === '' || e.key === 'Enter') {
-      e.preventDefault();
-      if (!e.repeat) begin('key');
-    }
+    if (!isHoldKey(e.key)) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    // Enter is the non-gesture path: when a tap handler is supplied it fires immediately so
+    // keyboard users never have to satisfy a timed hold (WCAG 2.2.1). Space keeps the hold
+    // gesture, mirroring the pointer, and a quick release still resolves through onTap.
+    if (e.key === 'Enter' && onTap) { onTap(); return; }
+    begin('key');
   };
 
   const handleKeyUp = e => {
-    if (e.key === '' || e.key === 'Enter') {
-      e.preventDefault();
-      if (inputRef.current === 'key') release();
-    }
+    if (!isHoldKey(e.key)) return;
+    e.preventDefault();
+    if (inputRef.current === 'key') release();
   };
 
   useLayoutEffect(() => {

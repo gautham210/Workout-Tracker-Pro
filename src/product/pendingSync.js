@@ -21,11 +21,21 @@ function save(userId, entries, storage) {
   } catch { return false; }
 }
 
-/** Idempotent per graph id; returns false when storage refused the write. */
-export function enqueuePendingWorkout(userId, graph, { storage = defaultStorage(), now = Date.now(), error = null } = {}) {
+/**
+ * Idempotent per graph id; returns false when storage refused the write.
+ *
+ * `labels` is an optional `{ [exercise_id]: { name, muscle_group } }` map captured at enqueue
+ * time. `exercises.id` is a server-generated uuid, so a queued graph cannot be named later
+ * without a network call -- and queued work exists precisely when the device is offline.
+ * Labels live on the queue entry only; `flushPendingWorkouts` sends `entry.graph` and nothing
+ * else, so the sync payload is byte-identical to an unlabelled one.
+ */
+export function enqueuePendingWorkout(userId, graph, { storage = defaultStorage(), now = Date.now(), error = null, labels = null } = {}) {
   if (!userId || !storage || !graph?.id) return false;
   const rest = getPendingWorkouts(userId, storage).filter((entry) => entry.graph.id !== graph.id);
-  return save(userId, [...rest, { id: graph.id, queuedAt: now, attempts: 0, lastError: error, graph }], storage);
+  const entry = { id: graph.id, queuedAt: now, attempts: 0, lastError: error, graph };
+  if (labels && typeof labels === 'object') entry.labels = labels;
+  return save(userId, [...rest, entry], storage);
 }
 
 export function removePendingWorkout(userId, graphId, storage = defaultStorage()) {

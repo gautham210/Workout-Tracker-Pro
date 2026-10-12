@@ -30,18 +30,28 @@ export function useChatThread({ storageKey, extraBody, mapReply, timeoutMs = 25_
   const [messages, setMessages] = useState(() => load(storageKey));
   const [loading, setLoading] = useState(false);
   const controller = useRef(null);
-  const loadedKey = useRef(storageKey);
+  // Which storage key the currently-held `messages` belong to. It is advanced in the
+  // same tick that swaps `messages`, so on an account switch the persist effect sees a
+  // key mismatch and skips instead of writing the previous account's thread under the
+  // new account's key.
+  const messagesKey = useRef(storageKey);
   const latest = useRef(messages);
   latest.current = messages;
 
   useEffect(() => {
-    if (loadedKey.current === storageKey) return;
-    loadedKey.current = storageKey;
+    if (messagesKey.current === storageKey) return;
     controller.current?.abort();
-    queueMicrotask(() => { setMessages(load(storageKey)); setLoading(false); });
+    queueMicrotask(() => {
+      messagesKey.current = storageKey;
+      setMessages(load(storageKey));
+      setLoading(false);
+    });
   }, [storageKey]);
 
-  useEffect(() => { if (loadedKey.current === storageKey) persist(storageKey, messages); }, [messages, storageKey]);
+  useEffect(() => {
+    if (messagesKey.current !== storageKey) return;
+    persist(storageKey, messages);
+  }, [messages, storageKey]);
   useEffect(() => () => controller.current?.abort(), []);
 
   const ask = useCallback(async (value, { retry = false } = {}) => {

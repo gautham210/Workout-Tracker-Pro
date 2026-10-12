@@ -54,7 +54,7 @@ export default function ImportExperience() {
       const rows = await getExerciseCatalog().catch(() => { throw new Error('The exercise library could not be loaded to check this plan. Try again.'); });
       setCatalog(rows);
       graphId.current = newId();
-      setResult({ ...parsed, exercises: parsed.exercises.map((exercise) => ({ ...exercise, sets: Array.isArray(exercise.sets) ? exercise.sets : [], catalogId: resolveParsed(exercise, rows), manual: false })) });
+      setResult({ ...parsed, exercises: parsed.exercises.map((exercise) => ({ ...exercise, rowKey: newId(), sets: Array.isArray(exercise.sets) ? exercise.sets : [], catalogId: resolveParsed(exercise, rows), manual: false })) });
       setState('review');
     } catch (parseError) { setState('idle'); setError(parseError?.message || 'This workout could not be parsed.'); }
   };
@@ -71,6 +71,7 @@ export default function ImportExperience() {
 
   const saveHistory = async () => {
     if (!result || saving) return;
+    if (!user?.id) { setError('You need to be signed in before an import can be saved.'); return; }
     setSaving(true); setError('');
     try {
       const session = sessionExercises().map((exercise) => ({
@@ -114,7 +115,9 @@ function ImportReview({ result, byId, stats, saving, onRename, onUpdateSet, onMa
     {result.ambiguous?.length > 0 && <div className="import-warning">The parser flagged ambiguous lines: {result.ambiguous.slice(0, 4).join('; ')}</div>}
     <div className="parsed-exercises">{result.exercises.map((exercise, index) => {
       const row = exercise.catalogId ? byId.get(exercise.catalogId) : null;
-      return <article key={`${exercise.name}-${index}`} className={row ? '' : 'is-unmatched'}>
+      // Stable per-row key: the movement name is user-editable, so keying on it remounted the
+      // row and dropped the caret after every keystroke.
+      return <article key={exercise.rowKey || index} className={row ? '' : 'is-unmatched'}>
         <div className="import-row-head"><ExerciseVisual exercise={row || { name: exercise.name }} compact /><div>
           <span className={row ? 'confidence high' : 'confidence medium'}>{row ? `Matches ${row.name}` : 'Not in your library'}</span>
           <label>Movement<input value={exercise.name} maxLength={160} onChange={(event) => onRename(index, event.target.value)} /></label>

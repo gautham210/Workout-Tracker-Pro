@@ -6,32 +6,61 @@ import ExerciseVisual from './ExerciseVisual';
 import AnimatedList from './react-bits/AnimatedList';
 import { addLocalDays, localDayKey, localDayStart, sessionVolume } from './analytics';
 import { fetchSessionPage } from './analyticsData';
+import { getPendingWorkouts } from './pendingSync';
 import './dataExperiences.css';
 
 const PAGE = 20;
 const kg = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Number(value) || 0);
-// pendingSync.js is created by another workstream; glob resolves to {} until it exists.
-const pendingModules = import.meta.glob('./pendingSync.js');
 
 async function loadPending(userId) {
   try {
-    const loader = pendingModules['./pendingSync.js'];
-    if (!loader) return [];
-    const module = await loader();
-    const rows = await module.getPendingWorkouts?.(userId);
+    const rows = await getPendingWorkouts(userId);
     return Array.isArray(rows) ? rows : [];
   } catch { return []; }
 }
 
-// Normalise a queued (unsynced) workout into the same shape the list renders.
+/**
+ * Normalise a queued (unsynced) workout into the same shape the list renders.
+ *
+ * `pendingSync.enqueuePendingWorkout` stores `{ id, queuedAt, attempts, lastError, graph, labels }`,
+ * so the workout graph lives under `graph` -- not at the top level. `labels` carries the
+ * movement names captured at enqueue time, because `exercises.id` is a server-generated uuid
+ * that cannot be resolved while the device is offline.
+ *
+ * Nothing here invents a value: a missing date, movement name or duration is left absent
+ * rather than substituted, so the UI renders an honest "unknown" instead of a fabricated one.
+ */
 function pendingToSession(item, index) {
-  const exercises = item.exercises || item.session_exercises || item.payload?.exercises || [];
-  const source = item.payload || item;
+  const graph = item?.graph;
+  if (!graph || typeof graph !== 'object') return null;
+  const labels = item.labels && typeof item.labels === 'object' ? item.labels : {};
+  const rows = Array.isArray(graph.exercises) ? graph.exercises : [];
+
+  // Prefer the real training date. `queuedAt` is a real stored timestamp and is an honest
+  // fallback for an entry written before a date existed; render time is never substituted.
+  const date = Number.isFinite(Date.parse(graph.date)) ? graph.date
+    : Number.isFinite(Number(item.queuedAt)) ? new Date(item.queuedAt).toISOString()
+      : null;
+  if (!date) return null;
+
   return {
-    id: `pending-${item.id || source.id || index}`, pending: true,
-    date: source.date || source.finished_at || item.created_at || new Date().toISOString(),
-    split_type: source.split_type, split_day: source.split_day, duration_minutes: source.duration_minutes,
-    session_exercises: exercises.map((row, i) => ({ id: row.id || `p${i}`, order_index: row.order_index ?? i, exercises: row.exercises || { name: row.name || row.exercise_name, muscle_group: row.muscle_group }, sets: (row.sets || []).map((set) => ({ ...set, completed: set.completed === true || set.completed === 1, is_warmup: Boolean(set.is_warmup) })) })),
+    id: `pending-${graph.id || item.id || index}`, pending: true, date,
+    split_type: graph.split_type ?? null,
+    split_day: graph.split_day ?? null,
+    duration_minutes: Number.isFinite(Number(graph.duration_minutes)) ? Number(graph.duration_minutes) : null,
+    session_exercises: rows.map((row, i) => {
+      const label = labels[row?.exercise_id] || {};
+      return {
+        id: row?.id || `p${i}`,
+        order_index: Number.isFinite(Number(row?.order_index)) ? Number(row.order_index) : i,
+        exercises: { name: label.name ?? null, muscle_group: label.muscle_group ?? null },
+        sets: (Array.isArray(row?.sets) ? row.sets : []).map((set) => ({
+          ...set,
+          completed: set?.completed === true || set?.completed === 1,
+          is_warmup: Boolean(set?.is_warmup),
+        })),
+      };
+    }),
   };
 }
 
@@ -64,7 +93,9 @@ export default function HistoryExperience() {
       supabase.from('workout_sessions').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_finished', true),
     ]).then(([page, queued, count]) => {
       if (!alive) return;
-      setSessions(page); setPending(queued.map(pendingToSession)); setTotal(count.error ? null : count.count);
+      setSessions(page);
+      setPending(queued.map(pendingToSession).filter(Boolean));
+      setTotal(count.error ? null : count.count);
       setHasMore(page.length === PAGE); setState('ready');
     }).catch(() => { if (alive) setState('error'); });
     return () => { alive = false; };
