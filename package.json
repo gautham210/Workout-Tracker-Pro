@@ -10,6 +10,7 @@
     "test": "npm run test:logic && npm run test:ui",
     "test:logic": "node --test tests/**/*.test.js",
     "test:ui": "vitest run",
+    "typecheck:mobile": "tsc -p mobile/tsconfig.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "jsdom": "^25.0.1",
+    "typescript-eslint": "^8.71.1",
     "vite": "^8.0.10",
     "vitest": "^5.0.3"
   },

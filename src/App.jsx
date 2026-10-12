@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const AppShell = lazy(() => import('./product/AppShell'));
 const LoginExperience = lazy(() => import('./product/LoginExperience'));
@@ -35,6 +36,8 @@ function App() {
   const { user } = useAuth();
   return (
     <BrowserRouter>
+      {/* Top-level guard: a failed route render must not leave a blank page. */}
+      <ErrorBoundary>
       <Suspense fallback={<main className="route-loading" aria-live="polite">Loading your workspace…</main>}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginExperience />} />
@@ -58,6 +61,7 @@ function App() {
           <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

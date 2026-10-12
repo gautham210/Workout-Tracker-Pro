@@ -1,14 +1,41 @@
 # React Bits audit — Workout Tracker Pro
 
-Audited against the official React Bits index and the upstream source on 2026-09-21. React Bits is a copy-paste component collection, not a dependency to import wholesale. Its own repository documents four source variants and selective installation; this product therefore adds only `motion`, the runtime required by the retained metric primitive.
+> **Corrected 2026-10-12.** The component-by-component decisions below were accurate when
+> written (2026-09-21) and describe a *selective* integration. The "Integrated" table and the
+> "Component decisions" rows for Counter, Prompt Bar, Dock, Hold Button, Glass Surface,
+> Animated List and Stepper no longer describe the shipped code, which uses all of them.
+> `src/product/react-bits/` currently contains: AnimatedList (History), Counter (Home,
+> Insights, Progress), Dock (AppShell), GlassSurface (AppShell), HoldButton (Workout
+> Experience), PromptBar (Coach, Nutritionist) and Stepper (**unused — no importers**).
+> The table and the rows marked *(shipped: in use)* below have been updated; the analytical
+> rows describing what was rejected are left intact because they remain useful rationale.
+
+Audited against the official React Bits index and the upstream source on 2026-09-21. React Bits is a copy-paste component collection, not a dependency to import wholesale. Its own repository documents four source variants and selective installation; this product therefore adds only `motion`, the runtime required by the retained metric primitives.
 
 ## Integrated
 
 | React Bits primitive | Product use | Why | Mobile treatment |
 | --- | --- | --- | --- |
-| Count Up | Home training summary and Progress volume | Makes real totals arrive with legible, restrained momentum. | Starts only in view, honors reduced motion, no interval or canvas. |
+| Count Up | Home training summary, Insights and Progress volume | Makes real totals arrive with legible, restrained momentum. | Starts only in view, honors reduced motion, no interval or canvas. |
+| Dock *(shipped: in use)* | Primary bottom navigation in AppShell | Touch magnification without the upstream GSAP hover dependency. | Not portable to native. |
+| Glass Surface *(shipped: in use)* | App top bar | Single instance, so the per-instance displacement map cost is acceptable. | Not portable to native. |
+| Prompt Bar *(shipped: in use)* | Coach and Nutritionist composers | Real composer with dictation and reduced-motion handling. | Not portable to native. |
+| Hold Button *(shipped: in use)* | "Hold to finish" in the active workout | Prevents an accidental one-tap finish. | Not portable to native. |
+| Animated List *(shipped: in use)* | Recent-sessions strip in History | Bounded list, no autoplay. | Not portable to native. |
+| Stepper *(shipped: unused)* | — | No importers. Safe to delete. | n/a |
 
 The local adaptations retain the upstream component architecture and attribution while using Workout Tracker Pro tokens, icon path, semantics, and existing data. No mock data was introduced.
+
+**Known accessibility debt in the vendored primitives** (found 2026-10-12, not yet fixed):
+
+- `Counter` renders ten stacked elements per digit, so assistive technology reads
+  "1 2 3 4 5 6 7 8 9 10 …". The primary Home metrics are currently unreadable by screen
+  reader. Needs `aria-hidden` on the digit stack plus a visually-hidden text alternative.
+- `AnimatedList` ships demo placeholder strings (`'Item 1'` … `'Item 15'`) as the default
+  `items` prop. Unreached today, but it is placeholder data in production source.
+- `AnimatedList` installs a window-level `keydown` listener that calls `preventDefault()` on
+  `Tab` when `enableArrowNavigation` is set. It is currently passed `false`, but enabling it
+  would break keyboard navigation for the entire application.
 
 ## Component decisions
 

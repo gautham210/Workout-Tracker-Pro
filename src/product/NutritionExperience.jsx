@@ -13,15 +13,25 @@ const numeric = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const defaultEntry = { name: '', meal_type: 'snack', calories: '', protein_g: '', carbs_g: '', fat_g: '', fiber_g: '' };
 const WINDOW_DAYS = 14;
 const targetColumns = 'calories,protein_g,carbs_g,fat_g,fiber_g,water_ml,source';
+// Must outlive the server's own vision budget (parse-food caps a request at 15s) so a healthy
+// slow scan is reported by the server rather than aborted here.
+const SCAN_TIMEOUT_MS = 30_000;
 
 // Posts to /api/parse-food directly so the stable error `code` survives.
 async function requestFoodScan(imageUri) {
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session?.access_token) throw Object.assign(new Error(scanErrorMessage('unauthorized')), { code: 'unauthorized' });
   let response;
+  // The server budgets 15s for the whole vision round-trip. Without a signal a fetch that never
+  // settles left `await` pending forever, `setScanning(false)` never ran, and the Scan button
+  // stayed disabled with no way back except a page reload.
+  const signal = AbortSignal.timeout(SCAN_TIMEOUT_MS);
   try {
-    response = await fetch('/api/parse-food', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify({ imageUri }) });
-  } catch { throw Object.assign(new Error(scanErrorMessage('offline')), { code: 'offline' }); }
+    response = await fetch('/api/parse-food', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify({ imageUri }) });
+  } catch (cause) {
+    const timedOut = cause?.name === 'AbortError' || signal.aborted;
+    throw Object.assign(new Error(scanErrorMessage(timedOut ? 'provider_timeout' : 'offline')), { code: timedOut ? 'provider_timeout' : 'offline' });
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) { const code = scanErrorCode(response.status, body); throw Object.assign(new Error(scanErrorMessage(code, typeof body.error === 'string' ? body.error : '')), { code }); }
   return body;

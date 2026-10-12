@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NetworkToast from '../components/NetworkToast';
+import ErrorBoundary from '../components/ErrorBoundary';
 import Dock from './react-bits/Dock';
 import GlassSurface from './react-bits/GlassSurface';
 import ProductLogo from './ProductLogo';
@@ -89,7 +90,7 @@ export default function AppShell() {
         </GlassSurface>
       </header>
 
-      <main className="product-main"><BackLink /><Outlet /></main>
+      <main className="product-main"><BackLink /><ErrorBoundary><Outlet /></ErrorBoundary></main>
 
       <nav className="product-react-bits-dock" aria-label="Primary navigation">
         <Dock items={dockItems} panelHeight={68} dockHeight={68} baseItemSize={46} magnification={52} distance={96} />
