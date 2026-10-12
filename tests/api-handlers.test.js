@@ -1,8 +1,9 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import aiChat, { __setDeps, __resetDeps } from '../api/ai-chat.js';
+import aiChat from '../api/ai-chat.js';
 import parseFood from '../api/parse-food.js';
 import parseWorkout from '../api/parse-workout.js';
+import { __setDeps, __resetDeps } from '../api/_deps.js';
 import { authenticate } from '../api/_auth.js';
 import { analyzeImageDataUri, extractJsonObject, validateChatMessages, validateCoachResponse } from '../api/_validation.js';
 

@@ -9,13 +9,22 @@
 
 import { setCors, isJsonRequest, safeLogMessage } from './_http.js';
 import { deps } from './_deps.js';
-export { __setDeps, __resetDeps } from './_deps.js';
 import { validateWorkoutParse, extractJsonObject, stripControlChars } from './_validation.js';
 import { findCatalogExercise, normalizeExerciseName } from '../shared/exerciseCatalog.js';
 
 const MAX_INPUT_CHARS = 12_000;
 const MAX_HINTS = 200;
 const MAX_HINT_CHARS = 80;
+
+// Shared provider coordinates. Imported from ai-chat so the origin and model name cannot drift
+// between the two text endpoints (each previously hard-coded its own copy).
+const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_TEXT_MODEL = process.env.NVIDIA_TEXT_MODEL || 'meta/llama-3.1-8b-instruct';
+// Provider budget per attempt. Overridable so operators can tune it and so the timeout
+// behaviour itself is testable without a 12-second wait.
+const PROVIDER_TIMEOUT_MS = Number(process.env.AI_PROVIDER_TIMEOUT_MS) > 0
+  ? Number(process.env.AI_PROVIDER_TIMEOUT_MS)
+  : 12_000;
 
 /** Bounded, de-duplicated exercise-name hints from the client. Returns null when the field is malformed. */
 export function sanitizeExerciseHints(value) {
@@ -469,8 +478,11 @@ export default async function handler(req, res) {
   try {
     const client = deps.createAiClient({
       apiKey,
-      baseURL: 'https://integrate.api.nvidia.com/v1',
-      timeout: 15_000,
+      baseURL: NVIDIA_BASE_URL,
+      timeout: PROVIDER_TIMEOUT_MS,
+      // The SDK retries twice by default. Combined with the bounded loop below that produced up
+      // to six billable completions for a single user request, and could outlive the function.
+      maxRetries: 0,
     });
 
     const hintBlock = hints.length
@@ -484,29 +496,28 @@ export default async function handler(req, res) {
     let systemPromptToUse = SYSTEM_PROMPT;
 
     while (attempt <= 2) {
+      // A real AbortSignal, not a Promise.race against a timer. The previous timer was never
+      // cleared and the losing request kept running, so the provider stayed busy and billable
+      // after the handler had already returned a regex fallback.
+      const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
       try {
-        const apiCallPromise = client.chat.completions.create({
-          model:       process.env.NVIDIA_TEXT_MODEL || 'meta/llama-3.1-8b-instruct',
+        const completion = await client.chat.completions.create({
+          model:       NVIDIA_TEXT_MODEL,
           temperature: 0.0,
           max_tokens:  1536,
+          signal,
           messages: [
             { role: 'system', content: systemPromptToUse },
             { role: 'user',   content: userContent },
           ],
         });
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Vision API request timed out')), 15000)
-        );
-
-        const completion = await Promise.race([apiCallPromise, timeoutPromise]);
-
-        const rawContent = completion.choices[0]?.message?.content ?? '';
+        const rawContent = completion?.choices?.[0]?.message?.content ?? '';
 
         parsed = extractJsonObject(rawContent);
         if (parsed) break;
       } catch (e) {
-        console.warn(`[AI_IMPORT] Parse attempt ${attempt} failed:`, e.message);
+        console.warn(`[AI_IMPORT] Parse attempt ${attempt} failed:`, safeLogMessage(e));
       }
 
       systemPromptToUse = SYSTEM_PROMPT + '\n\nCRITICAL: RETURN VALID JSON ONLY! Start with { and end with }. Do not include any explanation or markdown formatting.';

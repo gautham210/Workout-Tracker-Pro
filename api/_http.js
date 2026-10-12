@@ -8,7 +8,14 @@ export function setCors(req, res, methods) {
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', methods);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Retry-After is not a CORS-safelisted response header, so cross-origin callers cannot read
+  // it unless it is explicitly exposed. Without this the client cannot show a real countdown.
+  res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
   res.setHeader('Access-Control-Max-Age', '600');
+  // These responses carry the caller's own body weight, nutrition and training history. They must
+  // never be written to a shared or intermediary cache.
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 }
 
 export function isJsonRequest(req) {

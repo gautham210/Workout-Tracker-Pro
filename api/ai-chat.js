@@ -1,11 +1,15 @@
 import { setCors, isJsonRequest, errorMessage, safeLogMessage } from './_http.js';
 import { deps } from './_deps.js';
-export { __setDeps, __resetDeps } from './_deps.js';
 import { validateChatMessages, validateCoachResponse, extractJsonObject, stripControlChars } from './_validation.js';
 
 const TIMEOUT_LIMIT_MS = 12_000;
 const CATALOG_LIMIT = 500;
 const INTENTS = new Set(['nutrition', 'workout_generation', 'exercise_help', 'recovery', 'progression', 'general_fitness', 'unrelated']);
+
+// Single source of truth for the provider origin. parse-food keeps its own vision constant
+// because it may fall back to OpenAI; the text endpoints must always target NVIDIA NIM.
+export const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+export const NVIDIA_TEXT_MODEL = process.env.NVIDIA_TEXT_MODEL || 'meta/llama-3.1-8b-instruct';
 
 // Serialize as data inside delimiters; "<" is escaped so embedded text cannot close the block.
 const asDelimitedData = (tag, value) => `<${tag}>\n${JSON.stringify(value).replace(/</g, '\u003c').replace(/>/g, '\u003e')}\n</${tag}>`;
@@ -25,13 +29,25 @@ Every workoutPlan exercise name MUST be copied exactly from the allowed exercise
 Only include workoutPlan when the athlete asks to create or materially revise a workout. It is a reviewable proposal, never a database command. Respect recorded exclusions and available equipment. Do not claim unrecorded measurements or sessions.`;
 }
 
+/**
+ * Returns `{ rows, failure }`. A catalogue read that fails must NOT degrade to an empty list:
+ * `validateCoachResponse` treats an array catalogue as "grounded", so an empty array silently
+ * voids every exercise in every plan while the caller sees a 200 and an empty `unmatched` list.
+ */
+// One strict retry prompt, mirroring the pattern parse-food already uses.
+const STRICT_OUTPUT_SUFFIX = '\n\nCRITICAL: Reply with the single JSON object described above and nothing else. No prose, no markdown, no code fences.';
+
 async function loadCatalog(req) {
   try {
     const { data, error } = await deps.databaseClient(req).from('exercises')
       .select('id,name,aliases,muscle_group,equipment,movement_pattern').limit(CATALOG_LIMIT);
-    if (error || !Array.isArray(data)) return [];
-    return data.filter((row) => row && row.id != null && typeof row.name === 'string');
-  } catch { return []; }
+    if (error || !Array.isArray(data)) {
+      return { rows: [], failure: error?.message || 'catalogue query returned no rows' };
+    }
+    return { rows: data.filter((row) => row && row.id != null && typeof row.name === 'string'), failure: null };
+  } catch (error) {
+    return { rows: [], failure: errorMessage(error, 'catalogue query threw') };
+  }
 }
 
 export default async function handler(req, res) {
@@ -54,34 +70,74 @@ export default async function handler(req, res) {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'AI Coach is not configured.' });
 
-  const [context, catalog] = await Promise.all([
-    Promise.resolve().then(() => deps.loadAthleteContext(req)).catch(() => ({})),
+  const [context, catalogResult] = await Promise.all([
+    Promise.resolve().then(() => deps.loadAthleteContext(req)).catch((error) => {
+      console.error('[ai-chat] athlete context unavailable', safeLogMessage(error));
+      return {};
+    }),
     loadCatalog(req),
   ]);
+  if (catalogResult.failure) {
+    console.error('[ai-chat] exercise catalogue unavailable:', safeLogMessage(new Error(catalogResult.failure)));
+    return res.status(503).json({ error: 'The exercise library is temporarily unavailable, so a safe plan cannot be produced. Try again shortly.' });
+  }
+  const catalog = catalogResult.rows;
   const exerciseNames = [...new Set(catalog.map((row) => stripControlChars(row.name).replace(/\s+/g, ' ').trim().slice(0, 80)).filter(Boolean))];
   const system = buildSystemPrompt({ isNutritionist, context, exerciseNames });
 
   try {
-    const client = deps.createAiClient({ apiKey, baseURL: 'https://integrate.api.nvidia.com/v1', timeout: TIMEOUT_LIMIT_MS });
-    const completion = await client.chat.completions.create({
-      model: process.env.NVIDIA_TEXT_MODEL || 'meta/llama-3.1-8b-instruct', temperature: 0.2, max_tokens: 1100,
-      messages: [{ role: 'system', content: system }, ...validatedMessages.value],
+    const client = deps.createAiClient({
+      apiKey,
+      baseURL: NVIDIA_BASE_URL,
+      timeout: TIMEOUT_LIMIT_MS,
+      // One client request must equal one billable provider call. The SDK defaults to two
+      // implicit retries, which silently tripled spend and could outlive the function budget.
+      maxRetries: 0,
     });
-    const raw = completion.choices?.[0]?.message?.content?.trim();
-    if (!raw) return res.status(502).json({ error: 'AI Coach returned an empty response.' });
-    const parsed = extractJsonObject(raw);
-    const response = parsed ? validateCoachResponse(parsed, catalog) : null;
-    if (response) return res.status(200).json(response);
-    // Structured output failed validation. Prose can still be shown as conversation, but never as a plan;
-    // JSON-looking output that failed the schema is rejected rather than echoed.
-    if (parsed || /^\s*[{[`]/.test(raw)) return res.status(502).json({ error: 'AI Coach returned an invalid response.' });
-    const match = /__INTENT__:\s*([a-z_]+)/i.exec(raw);
-    const intent = match && INTENTS.has(match[1].toLowerCase()) && match[1].toLowerCase() !== 'workout_generation' ? match[1].toLowerCase() : 'general_fitness';
-    const text = stripControlChars(raw.replace(/__INTENT__:\s*[a-z_]+/ig, '')).trim().slice(0, 2800);
-    if (!text) return res.status(502).json({ error: 'AI Coach returned an invalid response.' });
-    return res.status(200).json({ text, intent, workoutPlan: null });
+    const requestBody = (extraInstruction = '') => ({
+      model: NVIDIA_TEXT_MODEL, temperature: 0.2, max_tokens: 1100,
+      messages: [
+        { role: 'system', content: system + extraInstruction },
+        ...validatedMessages.value,
+      ],
+    });
+
+    // Bounded to at most two provider calls. A small instruct model asked for a nested JSON
+    // envelope occasionally returns prose or markdown instead; one strict retry recovers those
+    // cheaply. Transport failures are NOT retried here -- the SDK already has retries off.
+    let raw = '';
+    let validatedResponse = null;
+    let lastError = null;
+    for (const extraInstruction of ['', STRICT_OUTPUT_SUFFIX]) {
+      const completion = await client.chat.completions.create(requestBody(extraInstruction));
+      const content = completion?.choices?.[0]?.message?.content?.trim() || '';
+      // Keep the most recent non-empty completion. An empty retry must not discard a usable
+      // prose answer the first attempt already produced.
+      if (content) raw = content;
+      if (!content) { lastError = new Error('empty completion'); continue; }
+      const parsed = extractJsonObject(content);
+      if (parsed) {
+        validatedResponse = validateCoachResponse(parsed, catalog);
+        if (validatedResponse) break;
+      }
+      lastError = new Error('completion did not satisfy the response schema');
+    }
+
+    if (validatedResponse) return res.status(200).json(validatedResponse);
+
+    // Prose that never produced the envelope can still be shown as conversation, but never as
+    // a plan. Output that looks like JSON but failed the schema is rejected rather than echoed.
+    if (raw && !/^\s*[{[`]/.test(raw)) {
+      const match = /__INTENT__:\s*([a-z_]+)/i.exec(raw);
+      const intent = match && INTENTS.has(match[1].toLowerCase()) && match[1].toLowerCase() !== 'workout_generation' ? match[1].toLowerCase() : 'general_fitness';
+      const text = stripControlChars(raw.replace(/__INTENT__:\s*[a-z_]+/ig, '')).trim().slice(0, 2800);
+      if (text) return res.status(200).json({ text, intent, workoutPlan: null });
+    }
+
+    console.error('[ai-chat] no usable completion:', safeLogMessage(lastError));
+    return res.status(502).json({ error: 'AI Coach returned an invalid response.' });
   } catch (error) {
     console.error('[ai-chat] provider failure', safeLogMessage(error));
-    return res.status(/timeout|timed out/i.test(errorMessage(error, '')) ? 504 : 502).json({ error: 'AI Coach is temporarily unavailable. Try again shortly.' });
+    return res.status(/timeout|timed out|abort/i.test(errorMessage(error, '')) ? 504 : 502).json({ error: 'AI Coach is temporarily unavailable. Try again shortly.' });
   }
 }

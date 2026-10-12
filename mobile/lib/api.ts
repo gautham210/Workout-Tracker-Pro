@@ -2,7 +2,10 @@ import { supabase } from './supabase';
 import { BACKEND_URL_VALUE, getConfigError } from './config';
 
 export const BACKEND_URL = BACKEND_URL_VALUE;
-const REQUEST_TIMEOUT_MS = 30_000;
+// Must outlive the server (two bounded provider attempts + auth/quota round-trips, ~25s) and
+// the Vercel function budget (30s), or the client reports failure while the provider is still
+// working and still being billed.
+const REQUEST_TIMEOUT_MS = 45_000;
 
 export type ApiErrorCode = 'unauthorized' | 'rate_limited' | 'unavailable' | 'timeout' | 'network' | 'config' | 'server';
 

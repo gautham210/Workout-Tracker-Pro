@@ -144,11 +144,14 @@ const finiteNumber = (value, min, max) => typeof value === 'number' && Number.is
 
 export function validateWorkoutParse(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const split = typeof value.split === 'string' ? value.split.slice(0, 80) : 'Custom';
+  const split = typeof value.split === 'string' ? stripControlChars(value.split).trim().slice(0, 80) : 'Custom';
   const date = typeof value.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.date) ? value.date : null;
   const exercises = Array.isArray(value.exercises) ? value.exercises.slice(0, 50).flatMap((exercise) => {
     if (!exercise || typeof exercise.name !== 'string') return [];
-    const name = exercise.name.trim().slice(0, 160);
+    // Strip control and bidi characters from model output before it can reach the UI or the
+    // saved library. Without this, a U+202E RIGHT-TO-LEFT OVERRIDE in a movement name renders
+    // visually reversed and can impersonate a different exercise.
+    const name = stripControlChars(exercise.name).trim().slice(0, 160);
     const sets = Array.isArray(exercise.sets) ? exercise.sets.slice(0, 100).flatMap((set) => {
       if (!set || !finiteNumber(set.weight_kg, 0, 1000) || !Number.isInteger(set.reps) || set.reps < 1 || set.reps > 500) return [];
       return [{ weight_kg: set.weight_kg, reps: set.reps }];
@@ -158,8 +161,9 @@ export function validateWorkoutParse(value) {
   }) : [];
   const ambiguous = Array.isArray(value.ambiguous) ? value.ambiguous.slice(0, 20).flatMap((item) => {
     if (!item || typeof item.raw !== 'string' || !Array.isArray(item.options)) return [];
-    const options = item.options.filter((option) => typeof option === 'string' && option.trim()).slice(0, 3).map((option) => option.trim().slice(0, 160));
-    return options.length ? [{ raw: item.raw.trim().slice(0, 160), options }] : [];
+    const options = item.options.filter((option) => typeof option === 'string' && option.trim()).slice(0, 3).map((option) => stripControlChars(option).trim().slice(0, 160)).filter(Boolean);
+    const raw = stripControlChars(item.raw).trim().slice(0, 160);
+    return options.length && raw ? [{ raw, options }] : [];
   }) : [];
   return { date, split, exercises, ambiguous };
 }

@@ -57,6 +57,24 @@ describe('ImportExperience — review mapping', () => {
     expect(screen.getByText(/1 of 1 movements ready/)).toBeTruthy()
   })
 
+  it('does not claim model output when the deterministic fallback was used', async () => {
+    post.mockResolvedValue({ ...PARSED, source: 'fallback' });
+
+    render(<ImportExperience />)
+    await review()
+
+    expect(screen.getByText(/offline structural parser, not the model/i)).toBeTruthy();
+  })
+
+  it('does not show a fallback notice for genuine model output', async () => {
+    post.mockResolvedValue({ ...PARSED, source: 'ai' });
+
+    render(<ImportExperience />)
+    await review()
+
+    expect(screen.queryByText(/offline structural parser/i)).toBeNull();
+  })
+
   it('keeps a hand-picked mapping when the movement name is edited', async () => {
     render(<ImportExperience />)
     await review()

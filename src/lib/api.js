@@ -1,6 +1,10 @@
 import { supabase } from './supabase';
 
-export const API_TIMEOUT_MS = 25_000;
+// Worst case for one serverless AI request is two bounded provider attempts (12s each) plus
+// auth, quota and context round-trips, so ~25s, and the Vercel function budget is 30s. The
+// client must outlive the SERVER, not the provider: aborting earlier shows the user a failure
+// while the provider is still working and still being billed.
+export const API_TIMEOUT_MS = 45_000;
 
 export async function authenticatedApiPost(path, payload, { signal, timeoutMs = API_TIMEOUT_MS } = {}) {
   const { data, error } = await supabase.auth.getSession();

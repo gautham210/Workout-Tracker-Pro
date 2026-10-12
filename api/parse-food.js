@@ -1,6 +1,5 @@
 import { setCors, isJsonRequest, errorMessage, safeLogMessage } from './_http.js';
 import { deps } from './_deps.js';
-export { __setDeps, __resetDeps } from './_deps.js';
 import { parseFoodProviderResponse, validateFoodAnalysis, analyzeImageDataUri } from './_validation.js';
 
 const TOTAL_BUDGET_MS = 15_000;

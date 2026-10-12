@@ -112,6 +112,7 @@ function ImportReview({ result, byId, stats, saving, onRename, onUpdateSet, onMa
   return <section className="import-review"><div className="review-head"><div><p className="eyebrow">Review before action</p><h2>{result.split || 'Custom'} workout</h2><span>{stats.included} of {stats.total} movements ready · {stats.sets} sets</span></div><button className="text-action" type="button" onClick={onStartOver}>Edit log</button></div>
     {stats.excluded > 0 && <div className="import-warning" role="alert">{stats.excluded} {stats.excluded === 1 ? 'movement is' : 'movements are'} not matched to your library and will be left out unless you map {stats.excluded === 1 ? 'it' : 'them'} below.</div>}
     {stats.droppedSets > 0 && <div className="import-warning" role="status">{stats.droppedSets} {stats.droppedSets === 1 ? 'set has' : 'sets have'} no valid weight or reps. {stats.droppedSets === 1 ? 'It' : 'They'} will be skipped when importing to history.</div>}
+    {result.source && result.source !== 'ai' && <div className="import-warning" role="status">Read with the offline structural parser, not the model, because the AI parser was unavailable. Check the numbers before importing.</div>}
     {result.ambiguous?.length > 0 && <div className="import-warning">The parser flagged ambiguous lines: {result.ambiguous.slice(0, 4).join('; ')}</div>}
     <div className="parsed-exercises">{result.exercises.map((exercise, index) => {
       const row = exercise.catalogId ? byId.get(exercise.catalogId) : null;
