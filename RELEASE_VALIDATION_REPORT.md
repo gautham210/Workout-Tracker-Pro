@@ -1,136 +1,248 @@
 # RELEASE VALIDATION REPORT — Workout Tracker Pro
 
-## Current Repository & Deployment State
-- **Current Branch**: `master`
-- **Current Certified Code Commit**: `f2ded007b89dbc91bb38fc7633ddb316f145089b`
-- **Remote**: `https://github.com/gautham210/Workout-Tracker-Pro.git`
-- **Remote Status**: `origin/master` points to certified code commit `f2ded007b89dbc91bb38fc7633ddb316f145089b`
-- **Branch Comparison**:
-  - `master`: Full, hardened production architecture. Contains the unified canonical exercise catalog (`shared/exerciseCatalog.js`), 20 inline SVG movement illustrations, 5 bundled photographs in `shared/exercise-art/`, the hardened Vercel API backend (`api/`), the Expo Router mobile application (`mobile/`), and the 96-test automated verification suite (`tests/`).
-  - `origin/master`: Matches certified code commit `f2ded00`. Holds the verified production code.
-  - `origin/main`: Stale divergent branch (8 commits, stopped at `10d378d` in early September 2026 with no common ancestor). Does not contain the unified catalog, the new migration suite, or the hardened API.
-  - **Intended Release Branch**: `master`.
-- **Working Tree State**: Clean.
-- **Deployment Assumptions**:
-  - Web & API: Deployed via Vercel.
-  - Database & Auth: Remote Supabase project `workout-helper-pro` (`egefeiuyktelihsbbzyt`).
-  - Mobile: Expo / React Native with local SQLite cache and SecureStore.
+**Date:** 2026-10-12
+**Branch:** `remediation/audit-fixes`
+**Head at time of writing:** `225ad75` (plus the cross-account isolation test commit below)
+**Supersedes:** the previous `RELEASE_VALIDATION_REPORT.md`, which recorded `f2ded00` as a
+fully certified release while simultaneously reporting that live AI generation was failing
+with HTTP 410 and HTTP 504.
 
 ---
 
-## Verification Audit & Reality Reconciliation
+# VERDICT: NOT CERTIFIED
 
-### 1. Database & Migrations (Supabase `egefeiuyktelihsbbzyt`) — PROVEN PASS
-- **Remote Connection**: Verified live via Supabase CLI (`v2.117.0`).
-- **Migration Status**:
-  - Pending migration `20260922000000_catalog_slugs_and_metrics_integrity.sql` was pushed live using `npx supabase db push --linked`.
-  - Verification run via `npx supabase db push --linked --dry-run` confirms: `{"upToDate":true,"dryRun":true,"migrations":[],"seeds":[],"roles":[],"message":"Remote database is up to date."}`.
-- **Canonical Schema**:
-  - Tables verified live: `workout_sessions`, `session_exercises`, `sets`, `exercises`, `profiles`, `food_entries`, `body_metrics_logs`, `bodyweight_logs`, `nutrition_targets`, `athlete_preferences`, `api_rate_limits`.
-  - Legacy SQL quarantined under `supabase/legacy/`.
-- **RPC `sync_workout_graph`**:
-  - Tested live against remote Supabase with multi-set workout payloads.
-  - Successfully inserted parent session (`workout_sessions`), session exercise (`session_exercises`), and completed sets (`sets`) in single atomic transactions. Returned session UUIDs: `d589cd85-90ae-412e-b7ac-99fe09b8fb94` and `ea4b5c46-1c8c-4451-88d5-4043e7dd11d3`.
-  - **Identified & Fixed Bug**: Postgres `sets.rpe` and `sets.rir` columns are typed as `integer`. When fractional values or non-integer numbers were sent in draft graph sync, Postgres raised `22023 ("workout payload contains an invalid value")` due to direct text-to-integer casting failure. Fixed in `src/product/workoutDraft.js` by introducing `integerOrNull`, rounding values safely before transmission.
+Three release gates are blocked. Two of them cannot be closed from this workspace at all,
+because the environment has no provider credentials and no SQL execution path.
 
-### 2. Authentication & Real Cross-User RLS Testing — PROVEN PASS
-- **Test Accounts**:
-  - User A: `protracker.release.tester@gmail.com` (UUID `aded483d-ef30-42d4-b8f2-46b36f762948`).
-  - User B: `protracker.userb.tester@gmail.com` (UUID `bb246566-4735-4ddc-a6cc-76a612a118bb`).
-- **Live RLS Verification**:
-  - User A inserted records in `workout_sessions`, `food_entries`, `body_metrics_logs`, and via `sync_workout_graph`.
-  - User B querying User A's `workout_sessions`: Returned **0 rows** (PASS).
-  - User B attempting to update User A's `workout_sessions`: Returned **0 rows updated** (PASS).
-  - User B querying User A's `food_entries`: Returned **0 rows** (PASS).
-  - User B querying User A's `body_metrics_logs`: Returned **0 rows** (PASS).
-  - User B attempting spoofed insert (setting `user_id = User A`): Rejected with Postgres RLS error: `"new row violates row-level security policy for table 'workout_sessions'"` (PASS).
-
-### 3. Exercise Image System — PROVEN PASS
-- **Single Canonical Catalog**: `shared/exerciseCatalog.js` contains 27 exercises, complete with aliases, movement pattern tags, difficulty, and visual keys.
-- **Asset Grounding**:
-  - 5 high-resolution bundled photos in `shared/exercise-art/` (`bench.jpg`, `deadlift.jpg`, `overhead.jpg`, `pull.jpg`, `squat.jpg`).
-  - 20 vector motion illustrations bundled as inline SVG strings in `shared/exerciseScenes.js`.
-  - **Zero remote image URLs**: Removed all unowned `googleusercontent` links.
-  - Web (`ExerciseVisual.jsx`) and mobile (`ExerciseVisual.tsx`) use layered fallback: SVG scene renders immediately; photo fades in on load; photo load error falls back gracefully to scene.
-
-### 4. Code Quality & Automated Test Suite — PROVEN PASS
-- **Node Test Runner (`npm test`)**: **96 / 96 passed** across 12 test suites:
-  - `tests/api-handlers.test.js`: Auth enforcement, rate limits, AI timeout handling, catalog grounding.
-  - `tests/api-validation.test.js`: Image MIME/magic-byte checks, structural PNG/JPEG/WebP validation, JSON extraction.
-  - `tests/athlete-metrics.test.js`: Mifflin-St Jeor BMR, TDEE, Navy body-fat formula, macro allocations.
-  - `tests/coach-workout-match.test.js`: Fuzzy exercise matching and alias resolution.
-  - `tests/exercise-catalog.test.js`: Unique slugs, valid exercise schemas, local assets exist.
-  - `tests/product-ownership.test.js`: Table RLS enforcement, auth cascades, anon denial.
-  - `tests/schema-contract.test.js`: Schema structure, RPC signatures, index definitions.
-  - `tests/web-analytics-core.test.js`: Working volume calculations, Brzycki/Epley e1RM, local-day streak logic.
-  - `tests/web-analytics-scan.test.js`: Meal groupings, range midpoints, local calendar day bounds.
-  - `tests/web-hygiene.test.js`: No hardcoded secrets, manifest icons, Vercel function timeout caps.
-  - `tests/web-workout-draft.test.js`: Crash recovery, draft persistence, deterministic UUID generation.
-  - `tests/web-workout-pending.test.js`: Offline sync queue FIFO order, network failure detection.
-- **Web Linter (`npm run lint`)**: **0 errors, 0 warnings**.
-- **Web Production Build (`npm run build`)**: Vite v8.0.10 build completed in 1.46s. Entry bundle 235 KB (75.8 KB gzip), `AppShell` split into lazy chunk.
-- **Mobile TypeScript (`cd mobile && npx tsc --noEmit`)**: **0 errors**.
-- **Mobile Android Bundle Export (`npx expo export --platform android`)**: Metro Hermes bundle succeeded (6.1 MB bytecode, 32 bundled assets).
-- **Mobile iOS Bundle Export (`npx expo export --platform ios`)**: Metro Hermes bundle succeeded (5.7 MB bytecode, 28 bundled assets).
-
-### 5. AI API Endpoints & Provider Integration — LIVE VERIFICATION AUDIT
-- **Vercel CLI & Environment**: Authenticated interactively via OAuth device flow (`NGPV-ZNNM`). Inspected production environment variables: `NVIDIA_API_KEY` exists in Production/Preview; `OPENAI_API_KEY` is not configured.
-- **Authentication Guard & Guardrails**: **PROVEN PASS**. Live bearer tokens enforced. Anonymous requests rejected with HTTP 401; oversized payloads rejected with HTTP 400; malformed/corrupted image URIs rejected with HTTP 422.
-- **`/api/parse-workout`**: PROVEN PASS for deterministic structural regex fallback (returns HTTP 200, parsed sets/reps). Live provider call returned `source: "fallback"` due to upstream NVIDIA HTTP 410 error. Real provider generation is **FAIL (Upstream Provider Inactive)**.
-- **`/api/ai-chat`**: Returns HTTP 502 (`[ai-chat] provider failure 410 status code (no body)`). Upstream NVIDIA inference endpoint returns HTTP 410 Gone due to account-level missing public inference provisioning on NVIDIA NIM. Real model response is **FAIL (Upstream Provider Inactive)**.
-- **`/api/parse-food`**: Image structure validation verified (magic bytes, size bounds). Returns HTTP 504 due to provider timeout on NVIDIA vision model. Real vision analysis is **FAIL (Upstream Provider Inactive)**.
-- **Root Cause & Remedy**: The configured `NVIDIA_API_KEY` in Vercel lacks hosted inference permissions on `https://integrate.api.nvidia.com/v1`, returning HTTP 410. To achieve full certification, an active `NVIDIA_API_KEY` with NIM public endpoint access or a valid `OPENAI_API_KEY` must be configured in Vercel.
-
-### 6. Mobile Runtime (Android Emulator & Expo Go) — PROVEN PASS
-- **Expo Bundler & Hermes Bytecode**: PROVEN PASS for Android Hermes bytecode export (6.1 MB bytecode, 32 bundled assets) and iOS Hermes bytecode export (5.7 MB bytecode, 28 bundled assets). Static type check (`cd mobile && npx tsc --noEmit`) passes with 0 errors.
-- **Physical Device / Android Emulator Runtime**: **PROVEN PASS**
-  - **Runtime Environment**: Android Emulator `emulator-5554` (`medium_phone`, Android 16 API 36) executing Expo Go SDK 57 connected live to Metro bundler.
-  - **1. Authentication**: Signed in live with real Supabase credentials (`protracker.release.tester@gmail.com`), verified session persistence across app restarts.
-  - **2. Home Screen**: Verified athlete greeting, "All changes synced" status badge, working volume, and streak cards.
-  - **3. Train & Exercise Library**: Browsed 27 canonical exercises with muscle filter chips (Chest, Back, Legs, Shoulders, Arms, Core), verified instant rendering of inline vector SVG movement illustrations and bundled photographs.
-  - **4. Workout Builder**: Built a custom workout routine by adding `Barbell Bench Press` and `Abs Machine`, verified sets and reps stepper controls.
-  - **5. Active Workout & Set Logging**: Launched active workout interface, entered weight (kg) and rep values, checked off completed sets with reactive UI updates.
-  - **6. Rest Timer**: Floating rest timer countdown executed accurately (e.g., 77s remaining), verified interactive controls: Pause, +30s increment, and Skip.
-  - **7. Workout Completion**: Concluded workout, validated session summary confirmation modal, dismissed local device persistence confirmation.
-  - **8. History & Progress**: Verified past session feed, total working volume calculations, and Brzycki/Epley estimated 1RM calculations.
-  - **9. Nutrition**: Verified macro target tracking, manual meal logging, and photo capture dialog triggers (camera/gallery options).
-  - **10. Profile & Account Settings**: Verified athlete weight (82.0 kg), navigation settings list, and safe sign-out confirmation.
-  - **11. Logout & Relogin**: Verified clean logout returning to `/sign-in`, re-entered credentials, and returned directly to Home.
-  - **12. Crash Recovery & Draft Persistence**: Started an in-flight workout, logged Set 1, force-killed app process (`adb shell am force-stop host.exp.exponent`), reopened Expo Go, confirmed "UNFINISHED WORKOUT" card with "Resume" action, and verified all in-flight draft sets were restored intact.
-  - **13. Offline Outbox & Background Sync**: Simulated network loss (`svc wifi disable; svc data disable; cmd connectivity airplane-mode enable`), app cleanly surfaced offline notice ("You appear to be offline"), logged and completed a workout (`Barbell Deadlift`, 40 kg x 10 reps) entirely offline to local SQLite outbox; restored connectivity (`svc wifi enable; svc data enable; cmd connectivity airplane-mode disable`), sync engine automatically flushed outbox to cloud, and UI updated to "Synced".
-  - **14. Remote Supabase Cloud Verification**: Verified live on remote Supabase (`egefeiuyktelihsbbzyt`) via Node SDK, confirming 6 remote sessions for the tester account, specifically verifying that the offline-created session `2c3012bc-687e-471f-8251-13ef68eb41fd` and set `3f5f963e-17c0-4b01-ad15-7f9aabecf032` (40 kg x 10 reps) successfully persisted in `workout_sessions`, `session_exercises`, and `sets` in the cloud.
+| Gate | Status |
+| --- | --- |
+| Critical data-corruption defects fixed and tested | **PASS** |
+| Automated release gates in place and green | **PASS** |
+| Database state verified | **PARTIAL** — ledger verified, schema/RLS/grants NOT verified |
+| **Live AI generation** | **BLOCKED** — no provider credentials exist |
+| **Cross-user RLS proven against a database** | **BLOCKED** — no SQL execution path |
+| **Mobile behavioural tests** | **NOT DONE** — unsupported toolchain in this workspace |
 
 ---
 
-## Final Release Gate Checklist
+## 1. Automated gates — all run, all recorded
 
-| Core Flow / Subsystem | Status | Verification Evidence / Failure Reason |
-| :--- | :--- | :--- |
-| **1. Auth** | **PROVEN PASS** | Live signed in with real Supabase Auth accounts; session restored; token verified |
-| **2. Workout** | **PROVEN PASS** | Full lifecycle: builder -> draft persistence -> active sets -> remote `sync_workout_graph` RPC |
-| **3. History** | **PROVEN PASS** | Real `workout_sessions` hierarchy query with exercises and sets fetched live |
-| **4. Progress** | **PROVEN PASS** | Total working volume, Brzycki/Epley e1RM, and local-day streak calculations verified on real records |
-| **5. Nutrition** | **PROVEN PASS** | Live inserted and queried meals in `food_entries`; daily totals computed |
-| **6. Food Scanner** | **FAIL (Upstream Provider Inactive)** | Pipeline and image structure validation verified; live vision provider request timed out (HTTP 504) due to NVIDIA NIM permissions |
-| **7. AI Coach** | **FAIL (Upstream Provider Inactive)** | Auth, rate-limiting, and guardrails verified; live inference returns HTTP 502 due to upstream NVIDIA NIM HTTP 410 Gone |
-| **8. Workout Import** | **PROVEN PASS (Fallback) / FAIL (AI Provider)** | Deterministic regex fallback fully working (returns 200); live AI model call returned 410 and fell back to regex (`source: "fallback"`) |
-| **9. Exercise Images** | **PROVEN PASS** | 5 bundled JPEGs + 20 vector motion SVG strings verified; 0 remote dependencies |
-| **10. Offline Sync** | **PROVEN PASS** | `enqueuePendingWorkout` and FIFO `flushPendingWorkouts` verified with simulated offline/online transitions |
-| **11. Security** | **PROVEN PASS** | Secret scan clean; cross-user RLS isolation proven; spoofed `user_id` writes denied; input guards verified |
-| **12. Mobile Runtime** | **PROVEN PASS** | Complete live flow on Android emulator with Expo Go: Login, Tabs, Catalog, Images, Builder, Active Sets, Rest Timer, Completion, History, Progress, Nutrition, Profile, Logout/Relogin, Crash Recovery, Offline Outbox, and Remote Supabase Cloud Persistence |
+Every command below was executed in this workspace. Nothing is quoted from a previous report.
 
----
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `npm run lint` | **0 errors**, 20 warnings (all pre-existing mobile findings, see §5) |
+| Logic tests | `npm run test:logic` | **128 passed, 0 failed, 1 skipped** (129 total) |
+| Behavioural tests | `npm run test:ui` | **34 passed**, 6 files |
+| Production build | `npm run build` | **succeeds**, entry 237.80 kB / 76.67 kB gzip |
+| Mobile typecheck | `npm run typecheck:mobile` | **exit 0**, no type errors |
+| Android bundle | `npx expo export --platform android` | **succeeds**, Hermes bytecode 6.1 MB |
+| iOS bundle | `npx expo export --platform ios` | **succeeds**, Hermes bytecode 5.7 MB |
+| Production dependencies | `npm audit --omit=dev` | **0 vulnerabilities** |
 
-## Final Certification Decision
+The single skipped test is `rls-cross-user`, which skips **loudly** because no disposable
+database is configured. That skip is a blocked gate, not a passing gate.
 
-**PROJECT STATUS:**  
-`NOT YET FULLY CERTIFIED`
+## 2. Defects found and fixed, each with a test that fails without the fix
 
-*(Rationale: Blocker 2 — Mobile Runtime — is 100% PROVEN PASS on a live Android emulator executing all required user journeys, crash recovery, and offline cloud synchronization. For Blocker 1 — Real AI Provider — Vercel CLI authentication was successfully completed via OAuth device flow, and production configuration was audited. However, the configured production `NVIDIA_API_KEY` failed live verification because upstream NVIDIA NIM returns `HTTP 410 Gone` on hosted inference endpoints (`https://integrate.api.nvidia.com/v1/chat/completions`), and no alternative `OPENAI_API_KEY` is configured in Vercel. In strict accordance with release engineering standards, the project status remains honestly designated as `NOT YET FULLY CERTIFIED` until an active inference provider key is provisioned.)*
+### Cross-account privacy leak — `useChatThread`
 
----
+**Reproduced:** on an account switch the persistence effect ran with the new storage key and
+the previous account's messages. Test output before the fix showed
+`"alpha secret | assistant reply | beta secret"` written into user A's key.
 
-## Known Non-Blocking Follow-up Items
-1. **Divergent `main` branch**: `origin/main` is an orphaned branch frozen at an earlier prototype stage. The active, production-ready codebase resides on `master`.
-2. **Mobile Build Tooling Audit**: `npm audit` on `mobile/` flags transitive build-time CLI dependencies in Expo SDK 57 / React Native CLI tooling (`metro`, `braces`). These do not affect runtime security in the compiled Hermes bundle.
-3. **Live AI Production Credentials**: Configure `NVIDIA_API_KEY` (or `OPENAI_API_KEY`) in the Vercel project environment settings or provide a `VERCEL_TOKEN` to enable live testing of AI Coach and Food Vision scanner endpoints.
+The guard meant to prevent this was satisfied one tick early: `loadedKey.current` was set
+*before* `setMessages` committed. A `messagesKey` ref is now advanced in the same tick that
+swaps `messages`, so the persist effect sees a mismatch and skips. Affects Coach and
+Nutritionist, which share the hook.
+
+### Fabricated offline history — `HistoryExperience`
+
+**Reproduced:** the rendered DOM read
+`Today · Workout · Session · not synced · Training day · 0 movements · 0 kg volume`.
+A queued workout was displaying as an empty session dated today, because the adapter read a
+shape `enqueuePendingWorkout` never writes and fell back to the *render* timestamp.
+
+Now reads the real graph. Movement names are captured as a `labels` map at enqueue time,
+because `exercises.id` is a server-generated uuid that cannot be resolved while the device is
+offline — which is exactly when pending work exists. A missing date now falls back to the
+stored queue timestamp, never to render time.
+
+### Import row identity and account guard — `ImportExperience`
+
+The React key embedded the user-editable movement name, so every keystroke remounted the row
+and dropped the caret after one character. Verified by reverting the key and watching the
+focus test fail. Rows now carry a stable key assigned at parse time. `saveHistory`
+dereferenced `user.id` without a guard and surfaced `Cannot read properties of undefined` to
+the user on a network failure.
+
+> Note: the original audit claimed renaming destroyed *manually mapped* catalogue rows. A test
+> was written to check it and **passed** — `{...exercise}` preserves `catalogId`. That claim was
+> not acted on.
+
+### Keyboard access — `HoldButton`
+
+`keydown`/`keyup` matched only `''` and `'Enter'`. Space is `' '`, so holding Space did
+nothing on the only control that finishes a workout. Space now drives the hold gesture and
+Enter fires the component's existing `onTap` immediately, so no keyboard user has to satisfy
+an 850 ms timed hold.
+
+### AI request lifecycle
+
+| Problem | Before | After |
+| --- | --- | --- |
+| SDK retries | default `maxRetries: 2`, unpinned | pinned to `0` on both text endpoints |
+| Orphaned provider work | `Promise.race` vs an uncleared `setTimeout`, no signal | real `AbortSignal` per attempt |
+| Silent catalogue failure | DB error → `[]` → every plan voided, HTTP 200, no log | logged 503 |
+| Bidi spoofing | `validateWorkoutParse` never stripped control characters | stripped on names, splits, ambiguous labels |
+| Client vs server timeout | client aborted at 25 s while server could run 25 s | 12 s attempt → ~25 s server → 30 s function → 45 s client |
+| Test-only auth seam | `__setDeps` exported from all 3 production handlers | throws on `NODE_ENV=production`, no longer re-exported |
+| Caching | responses cacheable | `Cache-Control: no-store`, `nosniff`, `Retry-After` exposed |
+
+## 3. Database — what was verified, and what was not
+
+### Verified (read-only, against the linked project `workout-helper-pro`)
+
+```
+supabase db push --linked --dry-run
+→ {"upToDate":true,"dryRun":true,"migrations":[],"message":"Remote database is up to date."}
+```
+
+This **disproves** a finding in the original audit, which warned that `03_*` / `04_*` might be
+missing from the ledger and would silently downgrade production RLS on the next push. With
+zero pending migrations, the ledger already contains them.
+
+Also verified statically: `20260921020000 "fix_sync_graph_uuid_children"` is a **genuine
+no-op**. Both function bodies are 5687 characters and identical after whitespace
+normalisation, and both already contain all five `::uuid` casts the migration claims to
+introduce. This is now asserted by a test so it cannot rot silently.
+
+### Changes made (none applied to production)
+
+- `20260920000000` created eight policies with bare `CREATE POLICY`; a second application
+  aborted on the first existing policy and left the database half migrated. Added
+  `DROP POLICY IF EXISTS` before each.
+- All seven `supabase/legacy/*.sql` scripts opened with *"Run this in your Supabase SQL Editor"*
+  and would downgrade production if pasted — weaker `USING (true)` policies, a
+  `SECURITY DEFINER handle_new_user` without `search_path`, and a `duration_minutes` type
+  conflict. Each now raises unconditionally.
+- Least-privilege hardening is **staged in `supabase/pending/`, not in `supabase/migrations/`**,
+  so a routine `db push` cannot apply it unreviewed.
+
+### NOT VERIFIED
+
+| Item | Why |
+| --- | --- |
+| Live table grants / `TRUNCATE` privileges | `supabase db dump` requires Docker; no local Postgres, `psql` or SQL client |
+| Live RLS policies as deployed | same |
+| Cross-user isolation in practice | same — `tests/sql/rls-cross-user.sql` is written and committed but has never been executed |
+| `20260921040000` / `20260922000000` actually applied | *inferred* from an up-to-date ledger, not confirmed directly |
+
+The RLS probe exists and is runnable:
+
+```bash
+SUPABASE_DB_URL='postgresql://postgres:<pw>@localhost:54322/postgres' \
+ALLOW_RLS_PROBE=1 npm run test:logic
+```
+
+It runs in a transaction and rolls back, and refuses hosts that look like production.
+
+## 4. Live AI generation — BLOCKED
+
+**No provider call was made.** `NVIDIA_API_KEY` and `OPENAI_API_KEY` are both absent from this
+workspace, so no model was ever contacted.
+
+The previous report recorded that the configured NVIDIA key returns **HTTP 410 Gone** and the
+food scanner returns **HTTP 504**. Those are the most recent observed production results and
+they are consistent with a key that lacks hosted-inference provisioning.
+
+**This gate cannot be closed until a working key is provisioned and all three endpoints are
+exercised against it.** Per the release standard, a deterministic fallback must not be counted
+as successful AI generation. As a direct result of this pass, the fallback is now *visible to
+the user* rather than silent, and `tests/api-ai-lifecycle.test.js` asserts that an aborted or
+failed provider call reports `source: "fallback"` rather than `source: "ai"`.
+
+## 5. Mobile — partial
+
+**Done:** TypeScript enforced in CI; `mobile/` removed from ESLint's `globalIgnores` so
+Rules of Hooks violations are now detectable; Android and iOS bundles export cleanly.
+
+**Not done:** behavioural tests. `mobile/lib/db.ts` (local schema), `lib/sync.ts` (outbox) and
+`components/SetRow.tsx` (`sanitizeSetInput`) remain untested.
+
+A harness was built and then **removed**. `react-native` ships Flow syntax, `expo` requires a
+Metro-only runtime, and `expo-sqlite` pulls in `expo-asset`; each workaround exposed another
+native-coupled import. Shipping a suite that works only because of five hand-written stubs
+would be a false gate that breaks on the next SDK bump.
+
+**Recommended path:** `jest-expo` + `@testing-library/react-native`, per `TEST_MATRIX.md`.
+
+**20 tracked lint warnings** now surface in 16 mobile files (`react-hooks/refs`,
+`set-state-in-effect`, `preserve-caught-error`). They are pre-existing and need a deliberate
+refactor with on-device verification. They are left visible as warnings rather than
+suppressed.
+
+## 6. Test coverage added this pass
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `useChatThread.test.jsx` | 7 | account-switch isolation, rehydration, error-bubble persistence |
+| `historyPending.test.jsx` | 7 | offline workouts render real dates, movements, volume, duration |
+| `importReview.test.jsx` | 6 | mapping preservation, row identity, account guard, AI provenance |
+| `holdButton.test.jsx` | 9 | Space/Enter, timing-free alternative, Escape cancel, pointer hold |
+| `nutritionScan.test.jsx` | 4 | timeout signal, timeout/offline/provider recovery |
+| `api-ai-lifecycle.test.js` | 13 | retry bounding, cancellation, truthful failure, stripping, seam |
+| `migrations-repeatable.test.js` | 7 | policy/table guards, search_path, duplicate verification, legacy guards |
+| `rls-cross-user.test.js` | 3 | probe integrity + **skips** the live probe |
+| `cross-account-isolation.test.js` | 6 | queue and draft namespacing, flush containment |
+| `web-hygiene.test.js` (extended) | +4 | CSP, `no-store`, CI wiring, seam closure |
+
+## 7. Also done
+
+- **CI**: `.github/workflows/ci.yml` — lint, both test suites, build, mobile typecheck,
+  production audit, gitleaks. There was previously **no CI at all**.
+- **Error boundaries**: app root and route level. There was previously **none**, so one throw
+  blanked the app. The UI shows only a short reference id, never a stack trace or the original
+  message, which can contain exercise notes and body metrics.
+- **Security headers**: CSP, HSTS, nosniff, DENY framing, Referrer-Policy,
+  Permissions-Policy, `no-store` on `/api`. There were previously **none**.
+- **Documentation**: `SECURITY_AUDIT.md`, `TEST_MATRIX.md`, `ROADMAP_RECOMMENDATIONS.md` and
+  `docs/REACT_BITS_AUDIT.md` all contradicted the code and have been rewritten against it.
+  The roadmap had scored AI Coach and the Food Scanner *up* because a fallback was read as
+  successful generation; both are lower now.
+
+## 8. Unresolved issues
+
+| # | Issue | Severity |
+| --- | --- | --- |
+| 1 | Live AI generation unproven; configured key previously returned HTTP 410 | **Blocker** |
+| 2 | Cross-user RLS never executed against a real database | **Blocker** |
+| 3 | `TRUNCATE` still granted to `authenticated`; RLS does not apply to it | High (staged, unapplied) |
+| 4 | Mobile behaviour untested | High |
+| 5 | `Counter` renders 10 elements per digit; Home's primary metrics are unreadable by screen reader | High |
+| 6 | No `FORCE ROW LEVEL SECURITY` | Medium |
+| 7 | Supabase Auth outages surface as 401, telling every user to sign in again | Medium |
+| 8 | Four screens each fetch full history with no cache (~140 requests per sweep) | Medium |
+| 9 | `save_athlete_metrics` creates an all-NULL row on a height-only save | Medium |
+| 10 | Client/DB measurement bounds disagree (300 cm vs 250 cm) → raw Postgres error to user | Medium |
+| 11 | 20 pre-existing mobile lint warnings | Low |
+| 12 | CSP uses `'unsafe-inline'` for styles | Low |
+
+## 9. Release decision
+
+**NOT CERTIFIED.** Do not promote `remediation/audit-fixes` to `origin/master` as a certified
+release.
+
+The branch is safe to merge as **engineering progress**: every defect it fixes was
+reproduced first, and every fix is covered by a test that fails without it. Nothing in it has
+been applied to the production database.
+
+To certify, the following must be done, in order:
+
+1. Provision a working `NVIDIA_API_KEY` or `OPENAI_API_KEY` and exercise all three endpoints.
+2. Run the RLS probe against a disposable database, then against a production *clone*.
+3. Run the read-only grant queries in `supabase/pending/` and review the hardening migration
+   with a backup in hand.
+4. Add mobile tests via `jest-expo`, covering the local schema and outbox.
+5. Fix the `Counter` accessibility defect.
+6. Then, and only then, merge to `master` and tag a release.
