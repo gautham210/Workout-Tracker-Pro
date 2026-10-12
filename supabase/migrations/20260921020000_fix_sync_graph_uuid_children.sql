@@ -1,3 +1,13 @@
+-- VERIFIED NO-OP (2026-10-12). The function body below was compared byte-for-byte against
+-- `sync_workout_graph` in 20260920000000_canonical_schema_and_sync.sql: both are 5687
+-- characters and identical after whitespace normalisation, and both already contain all five
+-- `::uuid` casts this migration claims to introduce. The only behavioural difference is the
+-- `revoke ... from anon` at the end, which 20260921000000 now covers for every function.
+--
+-- This file is retained, not deleted, because it is already recorded as applied in the remote
+-- migration ledger. `tests/migrations-repeatable.test.js` asserts the equivalence so the
+-- claim cannot silently rot. 20260922000000 supersedes both definitions.
+--
 -- session_exercises.id and sets.id are UUID columns in the deployed legacy
 -- schema. The public graph payload represents them as UUID strings, so cast at
 -- the database boundary before comparisons and writes.

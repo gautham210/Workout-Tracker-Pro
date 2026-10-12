@@ -190,6 +190,19 @@ alter table public.session_exercises enable row level security;
 alter table public.sets enable row level security;
 alter table public.bodyweight_logs enable row level security;
 
+-- Policies are dropped before creation so this migration is safely re-runnable. Without the
+-- drops, a second application aborts on the first `create policy` that already exists and
+-- leaves the database half-migrated. Schema drift is still visible: the policies are recreated
+-- from this file, not silently skipped.
+drop policy if exists "profiles_own_select" on public.profiles;
+drop policy if exists "profiles_own_insert" on public.profiles;
+drop policy if exists "profiles_own_update" on public.profiles;
+drop policy if exists "exercises_authenticated_read" on public.exercises;
+drop policy if exists "sessions_own_all" on public.workout_sessions;
+drop policy if exists "session_exercises_own_all" on public.session_exercises;
+drop policy if exists "sets_own_all" on public.sets;
+drop policy if exists "bodyweight_own_all" on public.bodyweight_logs;
+
 create policy "profiles_own_select" on public.profiles for select using (id = auth.uid());
 create policy "profiles_own_insert" on public.profiles for insert with check (id = auth.uid());
 create policy "profiles_own_update" on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
