@@ -51,8 +51,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
 
       - run: npm ci
+
+      # mobile/ has its own dependency tree. The root install does not provide
+      # Expo's tsconfig base or the React Native type declarations.
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile
 
       # Mobile was excluded from ESLint entirely until now, so Rules of Hooks violations in the
       # active-workout flow were undetectable. `npm run lint` from the repo root covers mobile/.
