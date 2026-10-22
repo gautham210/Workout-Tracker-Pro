@@ -2,7 +2,7 @@
 
 A production-grade, mobile-first fitness tracking, strength analytics, nutrition journal, and AI coaching platform. Workout Tracker Pro ships as a **Vite / React 19 web application** and an **offline-first Expo SDK 57 / React Native mobile application**, powered by a unified **Supabase PostgreSQL** backend and a suite of secure **Vercel Serverless Functions**.
 
-> **Branch Note:** `master` is the active development branch. `main` is an older ancestor branch and is stale. Always branch and pull against `master`.
+> **Branch Note:** `main` represents the verified production release. Active development and feature branches are merged via PRs.
 
 ---
 
